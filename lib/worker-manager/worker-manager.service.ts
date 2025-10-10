@@ -2,7 +2,7 @@
 import {
 	ParallelManagerOptions,
 	TaskResult,
-} from "@/interface/worker-manager.interface";
+} from "@/lib/worker-manager/worker-manager.interface";
 import os from "os";
 import { EventEmitter } from "events";
 
@@ -17,7 +17,7 @@ export class ParallelTaskManager extends EventEmitter {
 
 	constructor(options: ParallelManagerOptions = {}) {
 		super();
-		this.maxConcurrent = options.maxConcurrent || os.cpus().length;
+		this.maxConcurrent = os.cpus().length;
 		this.taskTimeout = options.taskTimeout || 30000;
 		this.retryAttempts = options.retryAttempts || 2;
 		this.retryDelay = options.retryDelay || 1000;

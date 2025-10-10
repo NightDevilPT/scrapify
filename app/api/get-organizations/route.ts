@@ -1,3 +1,4 @@
+// app/api/scrape/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { ScraperFactory } from "@/lib/scraper/scraper-factory";
 import { ScrapingProvider } from "@prisma/client";
@@ -6,7 +7,7 @@ import { ApiResponse } from "@/interface/api.interface";
 
 export async function POST(request: NextRequest) {
 	try {
-		const { provider, organizations, dateRange } = await request.json();
+		const { provider } = await request.json();
 
 		if (!provider) {
 			const response: ApiResponse<null> = {
@@ -36,11 +37,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		// Execute scraping
-		const result = await scraper.execute(
-			providerUrl,
-			organizations,
-			dateRange
-		);
+		const result = await scraper.getOrganizations(providerUrl);
 
 		if (result === null) {
 			const response: ApiResponse<null> = {
@@ -63,7 +60,6 @@ export async function POST(request: NextRequest) {
 	} catch (error) {
 		const errorMessage =
 			error instanceof Error ? error.message : "Unknown error occurred";
-			console.log(errorMessage);
 		const response: ApiResponse<null> = {
 			success: false,
 			data: null,

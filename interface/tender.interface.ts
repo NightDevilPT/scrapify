@@ -4,7 +4,7 @@ export interface ScrapedTenderData {
 	tenderId: string;
 	tenderRefNo: string;
 	version: number;
-	isLatest: boolean;
+	isLatest?: boolean;
 	tenderValue?: number;
 	workDescription: string;
 	preBidMeetingDate?: Date;

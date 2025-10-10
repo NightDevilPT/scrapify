@@ -1,17 +1,21 @@
-export interface ScrapingResult {
-	success: boolean;
-	data: any;
-	metadata: {
-		provider: string;
-		pagesScraped: number;
-		dataPoints: number;
-		duration: number;
-	};
-	error?: string;
+export interface OrganizationInfo {
+	name: string;
+	id: string;
+	value: string;
+}
+
+export interface DateRange {
+	startDate: Date;
+	endDate: Date;
 }
 
 export interface ScraperProvider {
-	execute(url: string): Promise<ScrapingResult>;
+	getOrganizations(url: string): Promise<OrganizationInfo[] | null>;
+	execute(
+		url: string,
+		organizations: string[],
+		dateRange?: DateRange
+	): Promise<any>;
 }
 
 export enum ScraperProviderType {
