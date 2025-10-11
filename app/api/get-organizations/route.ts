@@ -1,9 +1,9 @@
 // app/api/scrape/route.ts
+import { ApiResponse } from "@/interface/api.interface";
+import { ScrapingProvider } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { ScraperFactory } from "@/lib/scraper/scraper-factory";
-import { ScrapingProvider } from "@prisma/client";
 import { ScraperProviderURL } from "@/interface/active-scraper-session.interface";
-import { ApiResponse } from "@/interface/api.interface";
 
 export async function POST(request: NextRequest) {
 	try {
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		// Execute scraping
-		const result = await scraper.getOrganizations(providerUrl);
+		const result = await scraper.getOrganizations(providerUrl.url);
 
 		if (result === null) {
 			const response: ApiResponse<null> = {

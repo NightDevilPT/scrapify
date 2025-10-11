@@ -1,10 +1,10 @@
+import { NextResponse } from "next/server";
 import { ApiResponse } from "@/interface/api.interface";
-import { NextRequest, NextResponse } from "next/server";
 import { sessionManager } from "@/lib/session-manager/session-manager.service";
 
 export async function GET() {
 	try {
-		const session = sessionManager.getAllSessions();
+		const session = sessionManager.getSessionStats();
 		const response: ApiResponse<any> = {
 			success: true,
 			data: session,

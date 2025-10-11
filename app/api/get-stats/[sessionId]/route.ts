@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { NextResponse } from "next/server";
 import { ApiResponse } from "@/interface/api.interface";
-import { NextRequest, NextResponse } from "next/server";
 import { sessionManager } from "@/lib/session-manager/session-manager.service";
 
 // Schema for validating sessionId parameter
