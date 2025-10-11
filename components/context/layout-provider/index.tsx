@@ -14,6 +14,7 @@ import HeaderLogo from "@/components/shared/logo";
 import { Separator } from "@/components/ui/separator";
 import { RouteBreadcrumb } from "./route-breadcrumb";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { ConnectionStatus } from "@/components/shared/session-monitor";
 
 export function LayoutProvider({ children }: { children: React.ReactNode }) {
 	return (
@@ -45,6 +46,7 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
 							<RouteBreadcrumb />
 						</div>
 						<div className="flex justify-center items-center gap-4">
+							<ConnectionStatus />
 							<ThemeToggle />
 						</div>
 					</header>

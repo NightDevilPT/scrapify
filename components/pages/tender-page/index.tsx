@@ -1,13 +1,21 @@
 "use client";
+import {
+	Loader2,
+	RefreshCw,
+	AlertCircle,
+	Building2,
+	Play,
+	StopCircle,
+} from "lucide-react";
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import apiService from "@/lib/api-service/api.service";
 import { ApiResponse } from "@/interface/api.interface";
+import { TooltipComponent } from "@/components/shared/tooltip";
 import { OrganizationInfo } from "@/lib/scraper/scraper.interface";
 import { MultiSelectCombobox } from "@/components/shared/multi-select";
-import { Loader2, RefreshCw, AlertCircle, Building2, Play } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface TenderPageProps {
@@ -78,12 +86,19 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 							</Badge>
 						</div>
 
-						{selectedOrganizations.length > 0 && (
-							<Button variant={"outline"}>
-								<Play />
-								Scrap Tenders
-							</Button>
-						)}
+						<div className="space-x-3">
+							<TooltipComponent content="Start tender scraping">
+								<Button variant={"outline"}>
+									<Play />
+								</Button>
+							</TooltipComponent>
+
+							<TooltipComponent content="Stop tender scraping">
+								<Button variant={"destructive"}>
+									<StopCircle />
+								</Button>
+							</TooltipComponent>
+						</div>
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="space-y-6 p-0 px-4">
@@ -200,8 +215,6 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 							</div>
 						)}
 					</div>
-
-					
 				</CardContent>
 			</Card>
 		</div>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ThemeProvider } from "./theme-provider";
 import { LayoutProvider } from "./layout-provider";
+import { SessionProvider } from "./session-provider";
 
 export function RootProvider({ children }: { children: React.ReactNode }) {
 	return (
@@ -12,7 +13,9 @@ export function RootProvider({ children }: { children: React.ReactNode }) {
 			enableSystem
 			disableTransitionOnChange
 		>
-			<LayoutProvider>{children}</LayoutProvider>
+			<SessionProvider>
+				<LayoutProvider>{children}</LayoutProvider>
+			</SessionProvider>
 		</ThemeProvider>
 	);
 }
