@@ -1,14 +1,32 @@
 // lib/session-manager.ts
 import { ScrapingProvider, SessionStatus } from "@prisma/client";
+import { ElementType } from "react";
 
-export const ScraperProviderURL: Record<ScrapingProvider, string> = {
-	[ScrapingProvider.EPROCURE]:
-		"https://eprocure.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page",
-	[ScrapingProvider.GEM]:
-		"https://etenders.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page",
-	[ScrapingProvider.CPP_PORTAL]:
-		"https://eprocure.gov.in/cppp/resultoftendersnew/cpppdata",
-	[ScrapingProvider.CUSTOM]: "",
+export const ScraperProviderURL: Record<
+	ScrapingProvider,
+	{
+		url: string;
+		label: string;
+		icon?: ElementType;
+		description?: string;
+	}
+> = {
+	[ScrapingProvider.EPROCURE]: {
+		url: "https://eprocure.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page",
+		label: "E-Procure",
+	},
+	[ScrapingProvider.GEM]: {
+		url: "https://etenders.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page",
+		label: "Gem",
+	},
+	[ScrapingProvider.CPP_PORTAL]: {
+		url: "https://eprocure.gov.in/cppp/resultoftendersnew/cpppdata",
+		label: "CPP Portal",
+	},
+	[ScrapingProvider.CUSTOM]: {
+		url: "",
+		label: "Custom",
+	},
 };
 
 export interface IActiveSessionData {
@@ -22,6 +40,7 @@ export interface IActiveSessionData {
 	organizationsDiscovered: number;
 	organizationsScraped: number;
 	tendersFound: number;
+	tenderScraped: number;
 	tendersSaved: number;
 	pagesNavigated: number;
 	pagesPerMinute: number;

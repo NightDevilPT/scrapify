@@ -1,75 +1,36 @@
 // lib/scraper/providers/e-procure-scraper.ts
-import puppeteer, { Page } from "puppeteer";
-import { LoggerService } from "@/lib/logger-service/logger.service";
 import {
 	DateRange,
 	OrganizationInfo,
 	ScraperProvider,
 } from "../scraper.interface";
+import { isDateInRange } from "@/lib/utils";
+import puppeteer, { Page } from "puppeteer";
+import { ScrapingProvider } from "@prisma/client";
+import { LoggerService } from "@/lib/logger-service/logger.service";
+import { sessionManager } from "@/lib/session-manager/session-manager.service";
+
+interface ITendersLinkInfo {
+	title: string;
+	referenceNumber: string;
+	ePublishedDate: string;
+	closingDate: string;
+	openingDate: string;
+	tenderLink: string;
+	organizationChain: string;
+	tenderDetails?: any;
+}
 
 export class EProcureScraper implements ScraperProvider {
 	private logger: LoggerService;
 	private baseUrl: string = "https://eprocure.gov.in";
+	private sessionId: string = "";
+	private totalTendersFound: number = 0;
+	private totalTendersScraped: number = 0;
 
 	constructor() {
 		this.logger = LoggerService.getInstance();
 		this.logger.setContext(EProcureScraper.name);
-	}
-
-	// Tender Scrapper logic
-	async execute(url: string, organizations: string[], dateRange?: DateRange) {
-		let browser;
-		try {
-			this.logger.info(`Starting E-Procure execution for URL: ${url}`);
-			this.logger.info(
-				`Processing ${organizations.length} organizations`
-			);
-
-			// Launch Puppeteer browser
-			browser = await puppeteer.launch({
-				headless: true,
-				args: ["--no-sandbox", "--disable-setuid-sandbox"],
-			});
-
-			const page = await browser.newPage();
-
-			// Set a realistic user agent
-			await page.setUserAgent(
-				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-			);
-
-			// Navigate to the URL
-			await page.goto(url, {
-				waitUntil: "networkidle2",
-				timeout: 30000,
-			});
-
-			// Wait for the table to load
-			await page.waitForSelector("table.list_table", { timeout: 10000 });
-
-			this.logger.info("Page loaded, processing organizations...");
-
-			// Use the helper method to get tender links for all organizations
-			const results = await this.processOrganizationTendersProcess(
-				page,
-				organizations,
-				this.baseUrl
-			);
-
-			return results;
-		} catch (error) {
-			const errorMessage =
-				error instanceof Error
-					? error.message
-					: "Unknown error occurred";
-			this.logger.error(`Error in execute method: ${errorMessage}`);
-			return [];
-		} finally {
-			if (browser) {
-				await browser.close();
-				this.logger.info("Browser closed");
-			}
-		}
 	}
 
 	// Organization scraping logic
@@ -172,39 +133,135 @@ export class EProcureScraper implements ScraperProvider {
 		}
 	}
 
+	// Tender Scrapper logic
+	async execute(
+		url: string,
+		organizations: string[],
+		dateRange?: DateRange,
+		tendersPerOrganization: number = 20,
+		isTenderPerOrganizationLimited: boolean = false,
+		sessionId?: string
+	): Promise<any[]> {
+		let browser;
+		try {
+			this.logger.info(`Starting E-Procure execution for URL: ${url}`);
+
+			// Initialize session
+			this.sessionId = sessionId || crypto.randomUUID();
+			sessionManager.createSession({
+				id: this.sessionId,
+				name: EProcureScraper.name,
+				provider: ScrapingProvider.EPROCURE,
+				description: "E-Procure scraping session",
+				baseUrl: this.baseUrl,
+			});
+
+			// Reset counters for new session
+			this.totalTendersFound = 0;
+			this.totalTendersScraped = 0;
+
+			// Initialize session stats
+			sessionManager.updateStats(this.sessionId, {
+				organizationsDiscovered: organizations.length,
+				organizationsScraped: 0,
+				tendersFound: 0,
+				tenderScraped: 0,
+				tendersSaved: 0,
+				pagesNavigated: 0,
+			});
+
+			browser = await puppeteer.launch({
+				headless: true,
+				args: ["--no-sandbox", "--disable-setuid-sandbox"],
+			});
+
+			const page = await browser.newPage();
+			await page.setUserAgent(
+				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+			);
+
+			await page.goto(url, {
+				waitUntil: "networkidle2",
+				timeout: 30000,
+			});
+
+			await page.waitForSelector("table.list_table", { timeout: 10000 });
+
+			const results = await this.processOrganizationTendersProcess(
+				page,
+				organizations,
+				this.baseUrl,
+				dateRange,
+				tendersPerOrganization,
+				isTenderPerOrganizationLimited
+			);
+
+			sessionManager.completeSession(this.sessionId, {
+				status: "COMPLETED",
+				progress: 100,
+			});
+
+			return results;
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error
+					? error.message
+					: "Unknown error occurred";
+			this.logger.error(`Error in execute method: ${errorMessage}`);
+
+			// Update session with error
+			if (this.sessionId) {
+				sessionManager.failSession(this.sessionId, errorMessage);
+			}
+
+			return [];
+		} finally {
+			if (browser) {
+				await browser.close();
+				this.logger.info("Browser closed");
+			}
+		}
+	}
+
 	// =================================================== //
 	// ============ HELPER FUNCTIONS START ============== //
 	// =================================================== //
 
-	// Core method to process each organization's tenders
+	// Core method to process each organization's tenders with progress tracking
 	private async processOrganizationTendersProcess(
 		page: Page,
 		organizations: string[],
-		baseUrl: string
+		baseUrl: string,
+		dateRange?: DateRange,
+		tendersPerOrganization: number = 20,
+		isTenderPerOrganizationLimited: boolean = false
 	): Promise<any> {
 		const results: Array<{
 			organization: string;
 			tendersPageLink: string | null;
 			found: boolean;
-			tenders: Array<{
-				title: string;
-				referenceNumber: string;
-				ePublishedDate: string;
-				closingDate: string;
-				openingDate: string;
-				tenderLink: string;
-				organizationChain: string;
-			}>;
+			tenders: Array<ITendersLinkInfo>;
 		}> = [];
 
 		try {
 			// Store the original URL to navigate back after each organization
 			const originalUrl = page.url();
 
+			// Calculate progress per organization
+			const progressPerOrganization = 100 / organizations.length;
+			let currentOrganizationProgress = 0;
+
 			// Process each organization
-			for (const orgName of organizations) {
+			for (const [index, orgName] of organizations.entries()) {
 				try {
 					this.logger.info(`Processing organization: ${orgName}`);
+
+					// Update session for current organization
+					sessionManager.updateCurrentActivity(
+						this.sessionId,
+						orgName,
+						"Fetching tender links"
+					);
 
 					// Make sure we're on the main organizations page before getting the tender link
 					if (page.url() !== originalUrl) {
@@ -227,15 +284,7 @@ export class EProcureScraper implements ScraperProvider {
 						baseUrl
 					);
 
-					let tenders: Array<{
-						title: string;
-						referenceNumber: string;
-						ePublishedDate: string;
-						closingDate: string;
-						openingDate: string;
-						tenderLink: string;
-						organizationChain: string;
-					}> = [];
+					let tenders: Array<ITendersLinkInfo> = [];
 
 					if (tendersPageLink) {
 						this.logger.info(
@@ -253,17 +302,36 @@ export class EProcureScraper implements ScraperProvider {
 							timeout: 10000,
 						});
 
-						// Check if there are tenders available and scrape them
-						tenders = await this.scrapeTendersLinksFromPage(
-							page,
-							baseUrl
-						);
-
-						// Run the loop in the tenders page to get tender details
-						// Create a function which will scrap the tender data after clicking on the link
+						// UPDATED: Check if there are tenders available and scrape them with limit and date filtering
+						if (isTenderPerOrganizationLimited) {
+							this.logger.info(
+								`Scraping limited to ${tendersPerOrganization} tenders for ${orgName}`
+							);
+							tenders = await this.scrapeTendersLinksFromPage(
+								page,
+								baseUrl,
+								tendersPerOrganization,
+								dateRange,
+								orgName,
+								progressPerOrganization,
+								currentOrganizationProgress
+							);
+						} else {
+							this.logger.info(
+								`Scraping ALL tenders for ${orgName}`
+							);
+							tenders = await this.scrapeAllTendersFromAllPages(
+								page,
+								baseUrl,
+								dateRange,
+								orgName,
+								progressPerOrganization,
+								currentOrganizationProgress
+							);
+						}
 
 						this.logger.success(
-							`Found ${tenders.length} tenders for ${orgName}`
+							`Found ${tenders.length} tenders for ${orgName} after date filtering`
 						);
 
 						// After scraping tenders, navigate back to main page for next organization
@@ -287,6 +355,17 @@ export class EProcureScraper implements ScraperProvider {
 						found,
 						tenders,
 					});
+
+					// Update organization progress
+					currentOrganizationProgress += progressPerOrganization;
+					sessionManager.updateProgress(
+						this.sessionId,
+						currentOrganizationProgress
+					);
+					sessionManager.updateStats(this.sessionId, {
+						organizationsScraped: index + 1,
+					});
+
 				} catch (error) {
 					const errorMessage =
 						error instanceof Error
@@ -301,6 +380,16 @@ export class EProcureScraper implements ScraperProvider {
 						tendersPageLink: null,
 						found: false,
 						tenders: [],
+					});
+
+					// Still update progress even if organization fails
+					currentOrganizationProgress += progressPerOrganization;
+					sessionManager.updateProgress(
+						this.sessionId,
+						currentOrganizationProgress
+					);
+					sessionManager.updateStats(this.sessionId, {
+						organizationsScraped: index + 1,
 					});
 
 					// Try to recover by going back to main page
@@ -339,34 +428,19 @@ export class EProcureScraper implements ScraperProvider {
 		}
 	}
 
-	// Helper method to scrape tenders from the tender listing page
+	// Helper method to scrape tenders from the tender listing page with progress tracking
 	private async scrapeTendersLinksFromPage(
 		page: Page,
-		baseUrl: string
-	): Promise<
-		Array<{
-			title: string;
-			referenceNumber: string;
-			ePublishedDate: string;
-			closingDate: string;
-			openingDate: string;
-			tenderLink: string;
-			organizationChain: string;
-			tenderDetails?: any;
-		}>
-	> {
+		baseUrl: string,
+		limit?: number,
+		dateRange?: DateRange,
+		orgName?: string,
+		orgProgressPercentage?: number,
+		currentOrgProgress?: number
+	): Promise<Array<ITendersLinkInfo>> {
 		try {
 			const tenders = await page.evaluate((baseUrl) => {
-				const tenderList: Array<{
-					title: string;
-					referenceNumber: string;
-					ePublishedDate: string;
-					closingDate: string;
-					openingDate: string;
-					tenderLink: string;
-					organizationChain: string;
-					tenderDetails?: any;
-				}> = [];
+				const tenderList: Array<ITendersLinkInfo> = [];
 
 				// Get all data rows (excluding header)
 				const rows = document.querySelectorAll(
@@ -378,7 +452,6 @@ export class EProcureScraper implements ScraperProvider {
 
 					if (cells.length >= 6) {
 						// Extract data from each cell
-						const serialNumber = cells[0].textContent?.trim() || "";
 						const ePublishedDate =
 							cells[1].textContent?.trim() || "";
 						const closingDate = cells[2].textContent?.trim() || "";
@@ -427,20 +500,72 @@ export class EProcureScraper implements ScraperProvider {
 				return tenderList;
 			}, baseUrl);
 
-			// Now scrape detailed information for each tender
-			for (let i = 0; i < tenders.length; i++) {
+			// Apply date range filtering
+			const filteredTenders = tenders.filter((tender) =>
+				isDateInRange(tender.ePublishedDate, dateRange)
+			);
+
+			this.logger.info(
+				`Date filtering: ${tenders.length} total tenders, ${filteredTenders.length} after date filter`
+			);
+
+			// FIXED: Accumulate tenders found across all organizations
+			this.totalTendersFound += filteredTenders.length;
+			sessionManager.updateStats(this.sessionId, {
+				tendersFound: this.totalTendersFound,
+			});
+
+			// Apply limit if specified (after date filtering)
+			const limitedTenders = limit
+				? filteredTenders.slice(0, limit)
+				: filteredTenders;
+
+			// Calculate progress per tender for this organization
+			const progressPerTender =
+				orgProgressPercentage && limitedTenders.length > 0
+					? orgProgressPercentage / limitedTenders.length
+					: 0;
+
+			let tenderProgress = currentOrgProgress || 0;
+
+			// Now scrape detailed information for each tender (with limit applied)
+			for (let i = 0; i < limitedTenders.length; i++) {
 				try {
 					this.logger.info(
-						`Scraping detailed information for tender: ${tenders[i].title}`
+						`Scraping detailed information for tender: ${limitedTenders[i].title}`
+					);
+
+					// Update session for current tender
+					sessionManager.updateCurrentActivity(
+						this.sessionId,
+						orgName || "Unknown Organization",
+						`Scraping tender: ${limitedTenders[i].title}`
 					);
 
 					const tenderDetails = await this.scrapeTenderDetails(
 						page,
-						tenders[i].tenderLink,
+						limitedTenders[i].tenderLink,
 						baseUrl
 					);
 
-					tenders[i].tenderDetails = tenderDetails;
+					limitedTenders[i].tenderDetails = tenderDetails;
+
+					// FIXED: Accumulate tenders scraped across all organizations
+					this.totalTendersScraped++;
+					
+					// Update progress for each tender scraped
+					if (progressPerTender > 0) {
+						tenderProgress += progressPerTender;
+						sessionManager.updateProgress(
+							this.sessionId,
+							tenderProgress
+						);
+					}
+
+					// Update tender scraped count (accumulated total)
+					sessionManager.updateStats(this.sessionId, {
+						tenderScraped: this.totalTendersScraped,
+					});
 
 					// Go back to the tender listing page
 					await page.goBack({
@@ -456,11 +581,70 @@ export class EProcureScraper implements ScraperProvider {
 							? error.message
 							: "Unknown error occurred";
 					this.logger.error(
-						`Error scraping details for tender ${tenders[i].title}: ${errorMessage}`
+						`Error scraping details for tender ${limitedTenders[i].title}: ${errorMessage}`
 					);
-					tenders[i].tenderDetails = null;
+					limitedTenders[i].tenderDetails = null;
+
+					// Still accumulate even if tender fails (we attempted to scrape it)
+					this.totalTendersScraped++;
+
+					// Still update progress even if tender fails
+					if (progressPerTender > 0) {
+						tenderProgress += progressPerTender;
+						sessionManager.updateProgress(
+							this.sessionId,
+							tenderProgress
+						);
+					}
+
+					// Update tender scraped count (accumulated total)
+					sessionManager.updateStats(this.sessionId, {
+						tenderScraped: this.totalTendersScraped,
+					});
 				}
 			}
+
+			return limitedTenders;
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error
+					? error.message
+					: "Unknown error occurred";
+			this.logger.error(
+				`Error scraping tenders from page: ${errorMessage}`
+			);
+			return [];
+		}
+	}
+
+	// Method to scrape tenders from single page only with progress tracking
+	private async scrapeAllTendersFromAllPages(
+		page: Page,
+		baseUrl: string,
+		dateRange?: DateRange,
+		orgName?: string,
+		orgProgressPercentage?: number,
+		currentOrgProgress?: number
+	): Promise<Array<ITendersLinkInfo>> {
+		try {
+			this.logger.info(
+				"Scraping tenders from current page (no pagination available)"
+			);
+
+			// Simply scrape from the current page without attempting pagination
+			const tenders = await this.scrapeTendersLinksFromPage(
+				page,
+				baseUrl,
+				undefined, // No limit
+				dateRange,
+				orgName,
+				orgProgressPercentage,
+				currentOrgProgress
+			);
+
+			this.logger.success(
+				`Scraped ${tenders.length} tenders from current page`
+			);
 
 			return tenders;
 		} catch (error) {
@@ -783,6 +967,7 @@ export class EProcureScraper implements ScraperProvider {
 			};
 		}
 	}
+
 	// =================================================== //
 	// ============= HELPER FUNCTIONS END =============== //
 	// =================================================== //

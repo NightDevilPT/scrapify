@@ -5,8 +5,8 @@ export interface OrganizationInfo {
 }
 
 export interface DateRange {
-	startDate: Date;
-	endDate: Date;
+	startDate: Date | string;
+	endDate: Date | string;
 }
 
 export interface ScraperProvider {
@@ -14,7 +14,10 @@ export interface ScraperProvider {
 	execute(
 		url: string,
 		organizations: string[],
-		dateRange?: DateRange
+		dateRange?: DateRange,
+		tendersPerOrganization?: number,
+		isTenderPerOrganizationLimited?: boolean,
+		sessionId?: string // NEW: Accept session ID
 	): Promise<any>;
 }
 

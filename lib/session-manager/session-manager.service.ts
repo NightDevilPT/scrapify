@@ -4,6 +4,11 @@ import {
 } from "@/interface/active-scraper-session.interface";
 import { ScrapingProvider } from "@prisma/client";
 
+// Use global to persist across serverless functions (development only)
+declare global {
+	var _sessionManager: SessionManager | undefined;
+}
+
 class SessionManager {
 	private static instance: SessionManager;
 	private activeSessions: Map<string, IActiveSessionData> = new Map();
@@ -14,6 +19,15 @@ class SessionManager {
 	}
 
 	public static getInstance(): SessionManager {
+		// In development, use global to persist across hot reloads
+		if (process.env.NODE_ENV === "development") {
+			if (!global._sessionManager) {
+				global._sessionManager = new SessionManager();
+			}
+			return global._sessionManager;
+		}
+
+		// In production, use singleton pattern
 		if (!SessionManager.instance) {
 			SessionManager.instance = new SessionManager();
 		}
@@ -49,6 +63,7 @@ class SessionManager {
 			avgResponseTime: 0,
 			startedAt: new Date(),
 			lastActivityAt: new Date(),
+			tenderScraped: 0
 		};
 
 		this.activeSessions.set(sessionId, session);
@@ -98,6 +113,7 @@ class SessionManager {
 			organizationsDiscovered?: number;
 			organizationsScraped?: number;
 			tendersFound?: number;
+			tenderScraped?: number;
 			tendersSaved?: number;
 			pagesNavigated?: number;
 			pagesPerMinute?: number;
