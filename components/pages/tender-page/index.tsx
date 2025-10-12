@@ -9,13 +9,14 @@ import {
 } from "lucide-react";
 import React from "react";
 import { Label } from "@/components/ui/label";
+import { DateRange } from "react-day-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import apiService from "@/lib/api-service/api.service";
 import { ApiResponse } from "@/interface/api.interface";
 import { TooltipComponent } from "@/components/shared/tooltip";
 import { OrganizationInfo } from "@/lib/scraper/scraper.interface";
-import { MultiSelectCombobox } from "@/components/shared/multi-select";
+import FilterComponent from "@/components/shared/filter-component";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface TenderPageProps {
@@ -30,6 +31,16 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 		OrganizationInfo[]
 	>([]);
 	const [loading, setLoading] = React.useState(false);
+	const [dateRange, setDateRange] = React.useState<DateRange | undefined>({
+		from: (() => {
+			const yesterday = new Date();
+			yesterday.setDate(yesterday.getDate() - 1);
+			return yesterday;
+		})(),
+		to: new Date(),
+	});
+	const [tenderNumber, setTenderNumber] = React.useState<number>(10);
+	const [limitedTenderOnly, setLimitedTenderOnly] = React.useState(false);
 
 	const fetchOrganizations = async () => {
 		if (!tenderType) return;
@@ -66,6 +77,22 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 		setSelectedOrganizations([]);
 	};
 
+	const handleResetFilters = () => {
+		setTenderNumber(10);
+		setLimitedTenderOnly(false);
+		setDateRange({ from: undefined, to: undefined });
+	};
+
+	const handleApplyFilters = () => {
+		console.log("Applied filters:", {
+			provider: tenderType,
+			tendersPerOrganization: tenderNumber,
+			isTenderPerOrganizationLimited: limitedTenderOnly,
+			dateRange,
+			organizations: selectedOrganizations.map((item) => item.value),
+		});
+	};
+
 	// Auto-fetch organizations when tenderType changes
 	React.useEffect(() => {
 		if (tenderType) {
@@ -75,7 +102,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 
 	return (
 		<div className="w-full space-y-6">
-			<Card className="bg-transparent border-none p-0">
+			<Card className="bg-transparent border-none p-0 shadow-none">
 				<CardHeader className="p-0 px-4">
 					<CardTitle className="flex items-center justify-between text-xl">
 						<div className="flex items-center gap-3">
@@ -101,7 +128,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 						</div>
 					</CardTitle>
 				</CardHeader>
-				<CardContent className="space-y-6 p-0 px-4">
+				<CardContent className="space-y-6 p-0 px-4 shadow-none">
 					{/* Provider Info and Refresh Section */}
 					<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 bg-muted/50 rounded-lg border">
 						<div className="space-y-2">
@@ -138,83 +165,23 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 						</Button>
 					</div>
 
-					{/* Organization Selection Section */}
-					<div className="space-y-4">
-						<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-							<div className="space-y-1">
-								<Label className="text-lg font-semibold">
-									Select Organizations
-								</Label>
-								{selectedOrganizations.length > 0 && (
-									<p className="text-sm text-muted-foreground">
-										{selectedOrganizations.length} of{" "}
-										{organizations.length} organizations
-										selected
-									</p>
-								)}
-							</div>
-
-							{selectedOrganizations.length > 0 && (
-								<Button
-									onClick={clearAllOrganizations}
-									variant="outline"
-									size="sm"
-									className="text-destructive hover:text-destructive hover:bg-destructive/10"
-								>
-									Clear All
-								</Button>
-							)}
-						</div>
-
-						{/* MultiSelect Combobox */}
-						{!tenderType ? (
-							<div className="p-8 text-center border-2 border-dashed rounded-lg bg-muted/20">
-								<Building2 className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-								<p className="font-medium text-muted-foreground">
-									No Tender Type Selected
-								</p>
-								<p className="text-sm text-muted-foreground mt-1">
-									Please select a tender type to load
-									organizations
-								</p>
-							</div>
-						) : loading ? (
-							<div className="p-8 text-center border-2 border-dashed rounded-lg bg-muted/20">
-								<Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-muted-foreground" />
-								<p className="font-medium text-muted-foreground">
-									Loading Organizations
-								</p>
-								<p className="text-sm text-muted-foreground mt-1">
-									Fetching data from {tenderType}...
-								</p>
-							</div>
-						) : organizations.length === 0 ? (
-							<div className="p-8 text-center border-2 border-dashed rounded-lg bg-muted/20">
-								<AlertCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-								<p className="font-medium text-muted-foreground">
-									No Organizations Found
-								</p>
-								<p className="text-sm text-muted-foreground mt-1">
-									No organizations available for {tenderType}
-								</p>
-							</div>
-						) : (
-							<div className="space-y-4">
-								<MultiSelectCombobox
-									organizations={organizations}
-									selectedOrganizations={
-										selectedOrganizations
-									}
-									onSelectionChange={handleSelectionChange}
-									placeholder={`Select ${tenderType} organizations...`}
-									searchPlaceholder="Search organizations by name or value..."
-									emptyMessage="No organizations match your search criteria."
-									maxDisplay={2}
-									className="w-full"
-								/>
-							</div>
-						)}
-					</div>
+					{/* Filter Section */}
+					<FilterComponent
+						tenderType={tenderType}
+						organizations={organizations}
+						selectedOrganizations={selectedOrganizations}
+						loading={loading}
+						dateRange={dateRange}
+						tenderNumber={tenderNumber}
+						limitedTenderOnly={limitedTenderOnly}
+						onDateRangeChange={setDateRange}
+						onTenderNumberChange={setTenderNumber}
+						onLimitedTenderChange={setLimitedTenderOnly}
+						onOrganizationSelectionChange={handleSelectionChange}
+						onResetFilters={handleResetFilters}
+						onApplyFilters={handleApplyFilters}
+						onClearAllOrganizations={clearAllOrganizations}
+					/>
 				</CardContent>
 			</Card>
 		</div>

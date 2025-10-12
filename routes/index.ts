@@ -1,4 +1,10 @@
-import { Building, LayoutDashboard, PocketKnife, Puzzle } from "lucide-react";
+import {
+	Building,
+	LayoutDashboard,
+	PocketKnife,
+	Puzzle,
+	Settings,
+} from "lucide-react";
 import { ElementType } from "react";
 
 interface IRoute {
@@ -6,7 +12,7 @@ interface IRoute {
 	label: string;
 	icon: ElementType;
 	url: string;
-	tenderType: string;
+	tenderType?: string;
 }
 
 export const Routes: IRoute[] = [
@@ -20,22 +26,29 @@ export const Routes: IRoute[] = [
 	{
 		id: crypto.randomUUID(),
 		label: "E-Procure",
-		url: "/EPROCURE",
+		url: "/scrapper/EPROCURE",
 		icon: Building,
 		tenderType: "EPROCURE",
 	},
 	{
 		id: crypto.randomUUID(),
 		label: "Gem",
-		url: "/GEM",
+		url: "/scrapper/GEM",
 		icon: PocketKnife,
 		tenderType: "GEM",
 	},
 	{
 		id: crypto.randomUUID(),
 		label: "Cpp-Portal",
-		url: "/CPP_PORTAL",
+		url: "/scrapper/CPP_PORTAL",
 		icon: Puzzle,
+		tenderType: "CPP_PORTAL",
+	},
+	{
+		id: crypto.randomUUID(),
+		label: "Settings",
+		url: "/settings",
+		icon: Settings,
 		tenderType: "CPP_PORTAL",
 	},
 ];

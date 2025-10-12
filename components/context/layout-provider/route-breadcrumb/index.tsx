@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import React from "react";
 import Link from "next/link";
+import { Routes } from "@/routes";
 import { usePathname } from "next/navigation";
 
 // Interface for breadcrumb items
@@ -22,8 +23,9 @@ interface RouteBreadcrumb {
 
 export const RouteBreadcrumb: React.FC = () => {
 	const pathname = usePathname();
-	// Split the pathname into segments and filter out empty strings
-	const pathSegments = pathname
+	// Normalize pathname: remove trailing slash and query params, then split into segments
+	const normalizedPathname = pathname.split("?")[0].replace(/\/$/, "");
+	const pathSegments = normalizedPathname
 		.split("/")
 		.filter((segment: string) => segment);
 
@@ -33,15 +35,42 @@ export const RouteBreadcrumb: React.FC = () => {
 		{
 			label: "Home",
 			href: "/",
-			isCurrent: pathname === "/",
+			isCurrent: normalizedPathname === "/" || normalizedPathname === "",
 		},
 		// Map path segments
-		...pathSegments.map((segment: string, index: number) => {
-			const href = `/${pathSegments.slice(0, index + 1).join("/")}`;
-			const isCurrent = index === pathSegments.length - 1;
-			const label = segment.charAt(0).toUpperCase() + segment.slice(1);
-			return { label, href, isCurrent };
-		}),
+		...pathSegments.reduce(
+			(acc: RouteBreadcrumb[], segment: string, index: number) => {
+				// Skip the "scrapper" segment
+				if (segment.toLowerCase() === "scrapper") {
+					return acc;
+				}
+
+				// Construct the href for the current segment
+				const href = `/${pathSegments.slice(0, index + 1).join("/")}`;
+
+				// Find the matching route from the Routes array
+				const matchingRoute = Routes.find(
+					(route) => route.url.toLowerCase() === href.toLowerCase()
+				);
+
+				// If no matching route, skip this segment to avoid invalid breadcrumbs
+				if (matchingRoute) {
+					const isCurrent = index === pathSegments.length - 1;
+					return [
+						...acc,
+						{
+							label: matchingRoute.label,
+							href: matchingRoute.url,
+							isCurrent,
+						},
+					];
+				}
+
+				// Fallback for unmatched routes (optional: can be removed if you want strict matching)
+				return acc;
+			},
+			[]
+		),
 	];
 
 	// Define collapse threshold
@@ -58,6 +87,21 @@ export const RouteBreadcrumb: React.FC = () => {
 					: undefined,
 		  ].filter((item): item is RouteBreadcrumb => item !== undefined)
 		: breadcrumbItems;
+
+	// If no valid breadcrumbs (other than Home), show only Home
+	if (displayedItems.length === 0) {
+		return (
+			<Breadcrumb>
+				<BreadcrumbList>
+					<BreadcrumbItem>
+						<BreadcrumbPage className="bg-primary font-bold text-primary-foreground px-4 py-1 rounded-md">
+							Home
+						</BreadcrumbPage>
+					</BreadcrumbItem>
+				</BreadcrumbList>
+			</Breadcrumb>
+		);
+	}
 
 	return (
 		<Breadcrumb>

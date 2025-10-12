@@ -100,6 +100,8 @@ const SelectedOrganizationBadge = React.memo(
 	}) => {
 		const handleRemove = React.useCallback(
 			(e: React.MouseEvent) => {
+				e.preventDefault();
+				e.stopPropagation();
 				onRemove(organization.id, e);
 			},
 			[organization.id, onRemove]
@@ -108,13 +110,20 @@ const SelectedOrganizationBadge = React.memo(
 		return (
 			<Badge variant="secondary" className="pr-1.5 py-1 text-xs">
 				{organization.name}
-				<button
-					type="button"
+				<span
+					role="button"
+					tabIndex={0}
 					onClick={handleRemove}
-					className="ml-1 hover:bg-muted rounded-full"
+					onKeyDown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							handleRemove(e as any);
+						}
+					}}
+					className="ml-1 hover:bg-muted rounded-full cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
 				>
 					<X className="h-3 w-3" />
-				</button>
+				</span>
 			</Badge>
 		);
 	}
