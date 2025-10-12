@@ -102,3 +102,6 @@ export interface Tender {
 	<!-- sourceOfTender?: string -->
 	<!-- compressedTenderDocumentsURI?: string -->
 }
+
+<img width="1684" height="995" alt="image" src="https://github.com/user-attachments/assets/a4d0ac58-7e0c-4adb-9ac1-6777b5f211af" />
+<img width="1684" height="998" alt="image" src="https://github.com/user-attachments/assets/f88d7e7e-f058-4825-96e2-29fe45d57dd3" />
