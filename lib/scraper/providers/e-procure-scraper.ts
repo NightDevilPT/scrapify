@@ -6,7 +6,6 @@ import {
 } from "../scraper.interface";
 import { isDateInRange } from "@/lib/utils";
 import puppeteer, { Page } from "puppeteer";
-import { ScrapingProvider } from "@prisma/client";
 import { LoggerService } from "@/lib/logger-service/logger.service";
 import { sessionManager } from "@/lib/session-manager/session-manager.service";
 
@@ -148,13 +147,6 @@ export class EProcureScraper implements ScraperProvider {
 
 			// Initialize session
 			this.sessionId = sessionId || crypto.randomUUID();
-			sessionManager.createSession({
-				id: this.sessionId,
-				name: EProcureScraper.name,
-				provider: ScrapingProvider.EPROCURE,
-				description: "E-Procure scraping session",
-				baseUrl: this.baseUrl,
-			});
 
 			// Reset counters for new session
 			this.totalTendersFound = 0;
@@ -162,7 +154,7 @@ export class EProcureScraper implements ScraperProvider {
 
 			// Initialize session stats
 			sessionManager.updateStats(this.sessionId, {
-				organizationsDiscovered: organizations.length,
+				organizationsFound: organizations.length,
 				organizationsScraped: 0,
 				tendersFound: 0,
 				tenderScraped: 0,
@@ -365,7 +357,6 @@ export class EProcureScraper implements ScraperProvider {
 					sessionManager.updateStats(this.sessionId, {
 						organizationsScraped: index + 1,
 					});
-
 				} catch (error) {
 					const errorMessage =
 						error instanceof Error
@@ -552,7 +543,7 @@ export class EProcureScraper implements ScraperProvider {
 
 					// FIXED: Accumulate tenders scraped across all organizations
 					this.totalTendersScraped++;
-					
+
 					// Update progress for each tender scraped
 					if (progressPerTender > 0) {
 						tenderProgress += progressPerTender;

@@ -12,7 +12,7 @@ const scrapingSession = {
   progress: 20, // (10/50)*100 = 20%
   
   // Real-time stats
-  organizationsDiscovered: 50,  // Found 50 organizations on website
+  organizationsFound: 50,  // Found 50 organizations on website
   organizationsScraped: 10,     // Completed 10 organizations
   tendersFound: 347,            // Identified 347 tenders so far
   tendersSaved: 225,            // Saved 225 tenders to database

@@ -29,17 +29,17 @@ export async function GET(request: NextRequest) {
 
 			// Only send update if there are actual changes
 			// if (currentSessionData !== lastSessionData) {
-				await writer.write(
-					encoder.encode(
-						`data: ${JSON.stringify({
-							type: "UPDATE",
-							data: currentSessions,
-						})}\n\n`
-					)
-				);
+			await writer.write(
+				encoder.encode(
+					`data: ${JSON.stringify({
+						type: "UPDATE",
+						data: currentSessions,
+					})}\n\n`
+				)
+			);
 
-				// Update last session data
-				lastSessionData = currentSessionData;
+			// Update last session data
+			lastSessionData = currentSessionData;
 			// }
 
 			// Keep connection alive with heartbeat
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 			clearInterval(intervalId);
 			writer.close();
 		}
-	}, 2000); // Update every 2 seconds
+	}, 5000); // Update every 5 seconds
 
 	// Clean up on client disconnect
 	request.signal.addEventListener("abort", () => {

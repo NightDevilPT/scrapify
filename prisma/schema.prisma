@@ -24,101 +24,46 @@ enum SessionStatus {
 }
 
 model ScrapingSession {
-  id          String  @id @default(cuid())
-  name        String?
-  description String?
-
-  // Provider Info
-  provider ScrapingProvider @default(CUSTOM)
-  baseUrl  String
-
-  // Progress Tracking
-  status   SessionStatus @default(RUNNING)
-  progress Float         @default(0) // 0-100%
-
-  // Real-time Stats
-  organizationsDiscovered Int @default(0) // Total orgs found on website
-  organizationsScraped    Int @default(0) // Orgs completed scraping
-  tendersFound            Int @default(0) // Tenders identified during scraping
-  tendersSaved            Int @default(0) // Tenders saved to database
-  pagesNavigated          Int @default(0) // Total pages visited
-
-  // Performance Metrics
-  pagesPerMinute  Float @default(0) // Calculated every minute
-  avgResponseTime Float @default(0) // Average page load time in ms
-
-  // Current Activity
-  currentOrganization String? // "Indian Railways" - currently scraping
-  currentStage        String? // "tender_list", "tender_details"
-
+  id                      String           @id
+  
+  // Basic session info
+  name                    String?
+  description             String?
+  provider                ScrapingProvider
+  baseUrl                 String
+  status                  SessionStatus
+  
+  // Progress tracking
+  progress                Float            @default(0)
+  
+  // Statistics
+  organizationsFound      Int              @default(0)
+  organizationsScraped    Int              @default(0)
+  tendersFound            Int              @default(0)
+  tenderScraped           Int              @default(0)
+  tendersSaved            Int              @default(0)
+  pagesNavigated          Int              @default(0)
+  pagesPerMinute          Float            @default(0)
+  avgResponseTime         Float            @default(0)
+  
+  // Current activity tracking
+  currentOrganization     String?
+  currentStage            String?
+  
   // Timestamps
-  startedAt      DateTime        @default(now())
-  completedAt    DateTime?
-  lastActivityAt DateTime        @default(now())
-  ScrapedTender  ScrapedTender[]
-
+  startedAt               DateTime
+  completedAt             DateTime?
+  lastActivityAt          DateTime
+  
+  // Error information (for failed sessions)
+  errorMessage            String?
+  
+  // Metadata
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  
   @@index([provider])
   @@index([status])
   @@index([startedAt])
-  @@map("scraping_sessions")
-}
-
-model ScrapedTender {
-  id String @id @default(cuid())
-
-  // Tender Identification
-  tenderId    String
-  tenderRefNo String
-  version     Int     @default(1)
-  isLatest    Boolean @default(true)
-
-  // Tender Details (All your fields)
-  tenderValue                    Float?
-  workDescription                String
-  preBidMeetingDate              DateTime?
-  preBidMeetingAddress           String?
-  preBidMeetingPlace             String?
-  periodOfWork                   String?
-  organisationChain              String
-  organisation                   String
-  tenderInvitingAuthorityName    String
-  tenderInvitingAuthorityAddress String
-  emdAmount                      Float?
-  emdFeeType                     String
-  emdExceptionAllowed            Boolean   @default(false)
-  emdPercentage                  Float?
-  emdPayableTo                   String
-  emdPayableAt                   String
-  principal                      String
-  location                       String
-  pincode                        String
-  publishedDate                  DateTime
-  bidOpeningDate                 DateTime?
-  bidSubmissionStartDate         DateTime?
-  bidSubmissionEndDate           DateTime?
-  isSuretyBondAllowed            Boolean   @default(false)
-  sourceOfTender                 String?
-  compressedTenderDocumentsURI   String?
-
-  // Scraping Metadata
-  provider  ScrapingProvider
-  sourceUrl String
-  scrapedAt DateTime         @default(now())
-  dataHash  String
-
-  // Session Reference
-  sessionId       String?
-  scrapingSession ScrapingSession? @relation(fields: [sessionId], references: [id])
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([tenderId, version])
-  @@index([tenderId])
-  @@index([organisationChain])
-  @@index([publishedDate])
-  @@index([provider])
-  @@index([sessionId])
-  @@map("scraped_tenders")
+  @@index([lastActivityAt])
 }

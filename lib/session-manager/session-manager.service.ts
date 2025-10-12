@@ -2,7 +2,7 @@ import {
 	IActiveSessionData,
 	ISessionStats,
 } from "@/interface/active-scraper-session.interface";
-import { ScrapingProvider } from "@prisma/client";
+import { ScrapingProvider, PrismaClient } from "@prisma/client";
 
 // Use global to persist across serverless functions (development only)
 declare global {
@@ -12,8 +12,18 @@ declare global {
 class SessionManager {
 	private static instance: SessionManager;
 	private activeSessions: Map<string, IActiveSessionData> = new Map();
+	private prisma: PrismaClient;
+
+	// Debouncing mechanism
+	private pendingUpdates: Map<string, NodeJS.Timeout> = new Map();
+	private batchUpdateQueue: Map<string, IActiveSessionData> = new Map();
+	private batchTimeout: NodeJS.Timeout | null = null;
+	private readonly BATCH_DELAY = 5000; // 5 seconds
 
 	private constructor() {
+		// Initialize Prisma client
+		this.prisma = new PrismaClient();
+
 		// Cleanup completed sessions every hour
 		setInterval(() => this.cleanupOldSessions(), 60 * 60 * 1000);
 	}
@@ -37,24 +47,27 @@ class SessionManager {
 	/**
 	 * Create a new active session
 	 */
-	public createSession(data: {
+	public async createSession(data: {
 		id?: string;
 		name?: string;
 		description?: string;
 		provider: ScrapingProvider;
 		baseUrl: string;
-	}): IActiveSessionData {
-		const sessionId = data.id || `session_${Date.now()}`;
+	}): Promise<IActiveSessionData> {
+		// Use the provided ID or generate one
+		const sessionId =
+			data.id ||
+			`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 		const session: IActiveSessionData = {
-			id: sessionId,
+			id: sessionId, // This will be used as the database ID
 			name: data.name,
 			description: data.description,
 			provider: data.provider,
 			baseUrl: data.baseUrl,
 			status: "RUNNING",
 			progress: 0,
-			organizationsDiscovered: 0,
+			organizationsFound: 0,
 			organizationsScraped: 0,
 			tendersFound: 0,
 			tendersSaved: 0,
@@ -63,11 +76,24 @@ class SessionManager {
 			avgResponseTime: 0,
 			startedAt: new Date(),
 			lastActivityAt: new Date(),
-			tenderScraped: 0
+			tenderScraped: 0,
+			errorMessage: undefined,
 		};
 
 		this.activeSessions.set(sessionId, session);
-		console.log(`🆕 Session created: ${sessionId} for ${data.provider}`);
+
+		if (data.id) {
+			console.log(
+				`🆕 Session created with provided ID: ${sessionId} for ${data.provider}`
+			);
+		} else {
+			console.log(
+				`🆕 Session created with generated ID: ${sessionId} for ${data.provider}`
+			);
+		}
+
+		// Immediate save for new sessions
+		await this.storeSessionInDatabase(session);
 
 		return session;
 	}
@@ -82,16 +108,19 @@ class SessionManager {
 	/**
 	 * Update session progress and stats
 	 */
-	public updateSession(
+	public async updateSession(
 		sessionId: string,
 		updates: Partial<IActiveSessionData>
-	): boolean {
+	): Promise<boolean> {
 		const session = this.activeSessions.get(sessionId);
 		if (session) {
 			Object.assign(session, {
 				...updates,
 				lastActivityAt: new Date(),
 			});
+
+			// Debounced database update
+			this.scheduleSessionUpdate(sessionId, session);
 			return true;
 		}
 		return false;
@@ -100,17 +129,20 @@ class SessionManager {
 	/**
 	 * Update session progress
 	 */
-	public updateProgress(sessionId: string, progress: number): boolean {
-		return this.updateSession(sessionId, { progress });
+	public async updateProgress(
+		sessionId: string,
+		progress: number
+	): Promise<boolean> {
+		return await this.updateSession(sessionId, { progress });
 	}
 
 	/**
 	 * Update session stats
 	 */
-	public updateStats(
+	public async updateStats(
 		sessionId: string,
 		stats: {
-			organizationsDiscovered?: number;
+			organizationsFound?: number;
 			organizationsScraped?: number;
 			tendersFound?: number;
 			tenderScraped?: number;
@@ -119,19 +151,19 @@ class SessionManager {
 			pagesPerMinute?: number;
 			avgResponseTime?: number;
 		}
-	): boolean {
-		return this.updateSession(sessionId, stats);
+	): Promise<boolean> {
+		return await this.updateSession(sessionId, stats);
 	}
 
 	/**
 	 * Update current activity
 	 */
-	public updateCurrentActivity(
+	public async updateCurrentActivity(
 		sessionId: string,
 		organization: string,
 		stage: string
-	): boolean {
-		return this.updateSession(sessionId, {
+	): Promise<boolean> {
+		return await this.updateSession(sessionId, {
 			currentOrganization: organization,
 			currentStage: stage,
 		});
@@ -140,10 +172,10 @@ class SessionManager {
 	/**
 	 * Complete session
 	 */
-	public completeSession(
+	public async completeSession(
 		sessionId: string,
 		finalStats?: Partial<IActiveSessionData>
-	): boolean {
+	): Promise<boolean> {
 		const session = this.activeSessions.get(sessionId);
 		if (session) {
 			session.status = "COMPLETED";
@@ -154,9 +186,10 @@ class SessionManager {
 				Object.assign(session, finalStats);
 			}
 
-			// Store session in database
-			this.storeSessionInDatabase(session);
-
+			// Clear any pending updates and save immediately
+			this.clearPendingUpdate(sessionId);
+			await this.storeSessionInDatabase(session);
+			this.activeSessions.delete(sessionId);
 			return true;
 		}
 		return false;
@@ -165,15 +198,23 @@ class SessionManager {
 	/**
 	 * Mark session as failed
 	 */
-	public failSession(sessionId: string, error?: string): boolean {
+	public async failSession(
+		sessionId: string,
+		error?: string
+	): Promise<boolean> {
 		const session = this.activeSessions.get(sessionId);
 		if (session) {
 			session.status = "FAILED";
 			session.completedAt = new Date();
 
-			// Store session in database
-			this.storeSessionInDatabase(session);
+			if (error) {
+				session.errorMessage = error;
+			}
 
+			// Clear any pending updates and save immediately
+			this.clearPendingUpdate(sessionId);
+			await this.storeSessionInDatabase(session);
+			this.activeSessions.delete(sessionId)
 			return true;
 		}
 		return false;
@@ -182,14 +223,15 @@ class SessionManager {
 	/**
 	 * Stop session
 	 */
-	public stopSession(sessionId: string): boolean {
+	public async stopSession(sessionId: string): Promise<boolean> {
 		const session = this.activeSessions.get(sessionId);
 		if (session) {
 			session.status = "STOPPED";
 			session.completedAt = new Date();
 
-			// Store session in database
-			this.storeSessionInDatabase(session);
+			// Clear any pending updates and save immediately
+			this.clearPendingUpdate(sessionId);
+			await this.storeSessionInDatabase(session);
 
 			return true;
 		}
@@ -199,15 +241,176 @@ class SessionManager {
 	/**
 	 * Pause session
 	 */
-	public pauseSession(sessionId: string): boolean {
-		return this.updateSession(sessionId, { status: "PAUSED" });
+	public async pauseSession(sessionId: string): Promise<boolean> {
+		return await this.updateSession(sessionId, { status: "PAUSED" });
 	}
 
 	/**
 	 * Resume session
 	 */
-	public resumeSession(sessionId: string): boolean {
-		return this.updateSession(sessionId, { status: "RUNNING" });
+	public async resumeSession(sessionId: string): Promise<boolean> {
+		return await this.updateSession(sessionId, { status: "RUNNING" });
+	}
+
+	/**
+	 * Schedule debounced session update
+	 */
+	private scheduleSessionUpdate(
+		sessionId: string,
+		session: IActiveSessionData
+	): void {
+		// Clear existing timeout for this session
+		this.clearPendingUpdate(sessionId);
+
+		// Add to batch queue
+		this.batchUpdateQueue.set(sessionId, { ...session });
+
+		// Set batch timeout if not already set
+		if (!this.batchTimeout) {
+			this.batchTimeout = setTimeout(() => {
+				this.processBatchUpdates();
+			}, this.BATCH_DELAY);
+		}
+	}
+
+	/**
+	 * Clear pending update for a session
+	 */
+	private clearPendingUpdate(sessionId: string): void {
+		const timeout = this.pendingUpdates.get(sessionId);
+		if (timeout) {
+			clearTimeout(timeout);
+			this.pendingUpdates.delete(sessionId);
+		}
+		this.batchUpdateQueue.delete(sessionId);
+	}
+
+	/**
+	 * Process batched updates
+	 */
+	private async processBatchUpdates(): Promise<void> {
+		if (this.batchTimeout) {
+			clearTimeout(this.batchTimeout);
+			this.batchTimeout = null;
+		}
+
+		if (this.batchUpdateQueue.size === 0) {
+			return;
+		}
+
+		const sessionsToUpdate = Array.from(this.batchUpdateQueue.values());
+		this.batchUpdateQueue.clear();
+
+		try {
+			// Use transaction for batch update
+			await this.prisma.$transaction(async (tx) => {
+				for (const session of sessionsToUpdate) {
+					await this.upsertSessionInDatabase(tx, session);
+				}
+			});
+
+			console.log(`📊 Batch updated ${sessionsToUpdate.length} sessions`);
+		} catch (error) {
+			console.error(`❌ Failed to batch update sessions:`, error);
+
+			// Retry individual updates for failed sessions
+			for (const session of sessionsToUpdate) {
+				try {
+					await this.storeSessionInDatabase(session);
+				} catch (individualError) {
+					console.error(
+						`❌ Failed to update session ${session.id}:`,
+						individualError
+					);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Store session in database using Prisma
+	 */
+	private async storeSessionInDatabase(
+		session: IActiveSessionData
+	): Promise<void> {
+		try {
+			await this.upsertSessionInDatabase(this.prisma, session);
+			console.log(`💾 Session stored/updated in database: ${session.id}`);
+		} catch (error) {
+			console.error(
+				`❌ Failed to store session ${session.id} in database:`,
+				error
+			);
+		}
+	}
+
+	/**
+	 * Upsert session in database (helper method)
+	 */
+	private async upsertSessionInDatabase(
+		prisma: any, // Can be PrismaClient or transaction
+		session: IActiveSessionData
+	): Promise<void> {
+		// Check if session already exists in database
+		const existingSession = await prisma.scrapingSession.findUnique({
+			where: { id: session.id }, // Use session.id as the primary key
+		});
+
+		if (existingSession) {
+			// Update existing session
+			await prisma.scrapingSession.update({
+				where: { id: session.id }, // Use session.id as the primary key
+				data: {
+					name: session.name,
+					description: session.description,
+					provider: session.provider,
+					baseUrl: session.baseUrl,
+					status: session.status,
+					progress: session.progress,
+					organizationsFound: session.organizationsFound,
+					organizationsScraped: session.organizationsScraped,
+					tendersFound: session.tendersFound,
+					tenderScraped: session.tenderScraped,
+					tendersSaved: session.tendersSaved,
+					pagesNavigated: session.pagesNavigated,
+					pagesPerMinute: session.pagesPerMinute,
+					avgResponseTime: session.avgResponseTime,
+					currentOrganization: session.currentOrganization,
+					currentStage: session.currentStage,
+					startedAt: session.startedAt,
+					completedAt: session.completedAt,
+					lastActivityAt: session.lastActivityAt,
+					errorMessage: session.errorMessage,
+				},
+			});
+		} else {
+			// Create new session with the provided/generated ID as primary key
+			await prisma.scrapingSession.create({
+				data: {
+					id: session.id, // This uses the sessionId as the primary key
+					name: session.name,
+					description: session.description,
+					provider: session.provider,
+					baseUrl: session.baseUrl,
+					status: session.status,
+					progress: session.progress,
+					organizationsFound: session.organizationsFound,
+					organizationsScraped: session.organizationsScraped,
+					tendersFound: session.tendersFound,
+					tenderScraped: session.tenderScraped,
+					tendersSaved: session.tendersSaved,
+					pagesNavigated: session.pagesNavigated,
+					pagesPerMinute: session.pagesPerMinute,
+					avgResponseTime: session.avgResponseTime,
+					currentOrganization: session.currentOrganization,
+					currentStage: session.currentStage,
+					startedAt: session.startedAt,
+					completedAt: session.completedAt,
+					lastActivityAt: session.lastActivityAt,
+					errorMessage: session.errorMessage,
+				},
+			});
+		}
 	}
 
 	/**
@@ -304,49 +507,6 @@ class SessionManager {
 	}
 
 	/**
-	 * Store session in database using Prisma
-	 */
-	private async storeSessionInDatabase(
-		session: IActiveSessionData
-	): Promise<void> {
-		try {
-			// Import Prisma client (you might need to adjust the import path)
-			// const prisma = new PrismaClient();
-
-			// await prisma.scrapingSession.create({
-			//   data: {
-			//     id: session.id,
-			//     name: session.name,
-			//     description: session.description,
-			//     provider: session.provider,
-			//     baseUrl: session.baseUrl,
-			//     status: session.status,
-			//     progress: session.progress,
-			//     organizationsDiscovered: session.organizationsDiscovered,
-			//     organizationsScraped: session.organizationsScraped,
-			//     tendersFound: session.tendersFound,
-			//     tendersSaved: session.tendersSaved,
-			//     pagesNavigated: session.pagesNavigated,
-			//     pagesPerMinute: session.pagesPerMinute,
-			//     avgResponseTime: session.avgResponseTime,
-			//     currentOrganization: session.currentOrganization,
-			//     currentStage: session.currentStage,
-			//     startedAt: session.startedAt,
-			//     completedAt: session.completedAt,
-			//     lastActivityAt: session.lastActivityAt,
-			//   }
-			// });
-
-			console.log(`💾 Session stored in database: ${session.id}`);
-		} catch (error) {
-			console.error(
-				`❌ Failed to store session ${session.id} in database:`,
-				error
-			);
-		}
-	}
-
-	/**
 	 * Cleanup old sessions (keep only last 1000 sessions)
 	 */
 	private cleanupOldSessions(): void {
@@ -364,12 +524,26 @@ class SessionManager {
 
 			sessionsToRemove.forEach((session) => {
 				this.activeSessions.delete(session.id);
+				this.clearPendingUpdate(session.id);
 			});
 
 			console.log(
 				`🧹 Cleaned up ${sessionsToRemove.length} old sessions`
 			);
 		}
+	}
+
+	/**
+	 * Graceful shutdown - process any pending updates
+	 */
+	public async shutdown(): Promise<void> {
+		// Process any remaining batched updates
+		if (this.batchUpdateQueue.size > 0) {
+			await this.processBatchUpdates();
+		}
+
+		// Close Prisma connection
+		await this.prisma.$disconnect();
 	}
 }
 

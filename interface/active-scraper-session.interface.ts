@@ -1,6 +1,6 @@
 // lib/session-manager.ts
-import { ScrapingProvider, SessionStatus } from "@prisma/client";
 import { ElementType } from "react";
+import { ScrapingProvider, SessionStatus } from "@prisma/client";
 
 export const ScraperProviderURL: Record<
 	ScrapingProvider,
@@ -33,11 +33,14 @@ export interface IActiveSessionData {
 	id: string;
 	name?: string;
 	description?: string;
+
 	provider: ScrapingProvider;
 	baseUrl: string;
+
 	status: SessionStatus;
 	progress: number;
-	organizationsDiscovered: number;
+
+	organizationsFound: number;
 	organizationsScraped: number;
 	tendersFound: number;
 	tenderScraped: number;
@@ -45,11 +48,15 @@ export interface IActiveSessionData {
 	pagesNavigated: number;
 	pagesPerMinute: number;
 	avgResponseTime: number;
+
 	currentOrganization?: string;
 	currentStage?: string;
+
 	startedAt: Date;
 	completedAt?: Date;
 	lastActivityAt: Date;
+
+	errorMessage?: string; // Added for failed sessions
 }
 
 export interface ISessionStats {
