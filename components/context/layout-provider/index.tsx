@@ -13,6 +13,7 @@ import { AppSidebar } from "./app-sidebar";
 import HeaderLogo from "@/components/shared/logo";
 import { Separator } from "@/components/ui/separator";
 import { RouteBreadcrumb } from "./route-breadcrumb";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { ConnectionStatus } from "@/components/shared/session-monitor";
 
@@ -50,9 +51,9 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
 							<ThemeToggle />
 						</div>
 					</header>
-					<div className="w-full overflow-y-auto max-h-[calc(100vh-60px)]">
+					<ScrollArea className="w-full overflow-y-auto max-h-[calc(100vh-60px)] pb-5">
 						{children}
-					</div>
+					</ScrollArea>
 				</div>
 			</SidebarInset>
 		</SidebarProvider>

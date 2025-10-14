@@ -115,7 +115,7 @@ const SelectedOrganizationBadge = React.memo(
 					tabIndex={0}
 					onClick={handleRemove}
 					onKeyDown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
+						if (e.key === "Enter" || e.key === " ") {
 							e.preventDefault();
 							handleRemove(e as any);
 						}
@@ -303,7 +303,7 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
 						</div>
 					</Button>
 				</PopoverTrigger>
-				<PopoverContent className="w-full p-0" align="start">
+				<PopoverContent className="w-[450px] p-0" align="start">
 					<Command>
 						<CommandInput
 							placeholder={searchPlaceholder}

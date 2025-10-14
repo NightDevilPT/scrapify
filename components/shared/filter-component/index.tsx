@@ -88,7 +88,7 @@ const FilterComponent: React.FC<FilterComponentProps> = ({
 			<Card className="p-0 bg-transparent border-none shadow-none">
 				<CardContent className="space-y-5 p-0">
 					<div className="grid grid-cols-1 gap-4 w-full">
-						<div className="grid grid-cols-4 max-xl:grid-cols-1 gap-5">
+						<div className="grid grid-cols-3 gap-5">
 							{/* Tender Number Input */}
 							<div className="space-y-2 col-span-2">
 								<Label
@@ -112,8 +112,26 @@ const FilterComponent: React.FC<FilterComponentProps> = ({
 								/>
 							</div>
 
-							{/* Date Range Calendar */}
+							{/* Limited Tender Toggle */}
 							<div className="space-y-2">
+								<Label className="text-sm font-medium py-1.5"></Label>
+								<div className="flex justify-start pt-2 items-center gap-2">
+									<Label
+										htmlFor="limited-tender"
+										className="text-xs font-medium text-muted-foreground"
+									>
+										Show only limited tenders
+									</Label>
+									<Switch
+										id="limited-tender"
+										checked={limitedTenderOnly}
+										onCheckedChange={onLimitedTenderChange}
+									/>
+								</div>
+							</div>
+
+							{/* Date Range Calendar */}
+							<div className="space-y-2 col-span-full">
 								<Label className="text-sm font-medium">
 									Date Range
 								</Label>
@@ -163,26 +181,6 @@ const FilterComponent: React.FC<FilterComponentProps> = ({
 										/>
 									</PopoverContent>
 								</Popover>
-							</div>
-
-							{/* Limited Tender Toggle */}
-							<div className="space-y-2">
-								<Label className="text-sm font-medium">
-									Limited Tender
-								</Label>
-								<div className="flex justify-start pt-2 items-center gap-4">
-									<Label
-										htmlFor="limited-tender"
-										className="text-sm font-medium text-muted-foreground"
-									>
-										Show only limited tenders
-									</Label>
-									<Switch
-										id="limited-tender"
-										checked={limitedTenderOnly}
-										onCheckedChange={onLimitedTenderChange}
-									/>
-								</div>
 							</div>
 						</div>
 
