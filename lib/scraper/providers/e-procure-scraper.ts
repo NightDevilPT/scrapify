@@ -26,6 +26,7 @@ export class EProcureScraper implements ScraperProvider {
 	private sessionId: string = "";
 	private totalTendersFound: number = 0;
 	private totalTendersScraped: number = 0;
+	private isStopped: boolean = false;
 
 	constructor() {
 		this.logger = LoggerService.getInstance();
@@ -147,6 +148,7 @@ export class EProcureScraper implements ScraperProvider {
 
 			// Initialize session
 			this.sessionId = sessionId || crypto.randomUUID();
+			this.isStopped = false;
 
 			// Reset counters for new session
 			this.totalTendersFound = 0;
@@ -188,10 +190,13 @@ export class EProcureScraper implements ScraperProvider {
 				isTenderPerOrganizationLimited
 			);
 
-			sessionManager.completeSession(this.sessionId, {
-				status: "COMPLETED",
-				progress: 100,
-			});
+			// Only mark as completed if not stopped by user
+			if (!this.isStopped) {
+				sessionManager.completeSession(this.sessionId, {
+					status: "COMPLETED",
+					progress: 100,
+				});
+			}
 
 			return results;
 		} catch (error) {
@@ -213,6 +218,18 @@ export class EProcureScraper implements ScraperProvider {
 				this.logger.info("Browser closed");
 			}
 		}
+	}
+
+	// Check if scraping should stop
+	private shouldStop(): boolean {
+		if (this.isStopped) return true;
+
+		const session = sessionManager.getSession(this.sessionId);
+		if (session?.status === "STOPPED") {
+			this.isStopped = true;
+			return true;
+		}
+		return false;
 	}
 
 	// =================================================== //
@@ -245,6 +262,14 @@ export class EProcureScraper implements ScraperProvider {
 
 			// Process each organization
 			for (const [index, orgName] of organizations.entries()) {
+				// Check if scraping should stop before processing each organization
+				if (this.shouldStop()) {
+					this.logger.info(
+						`Scraping stopped by user for session: ${this.sessionId}`
+					);
+					break;
+				}
+
 				try {
 					this.logger.info(`Processing organization: ${orgName}`);
 
@@ -267,6 +292,12 @@ export class EProcureScraper implements ScraperProvider {
 						await page.waitForSelector("table.list_table", {
 							timeout: 10000,
 						});
+					}
+
+					// Check again after navigation
+					if (this.shouldStop()) {
+						this.logger.info(`Scraping stopped during navigation`);
+						break;
 					}
 
 					// Extract tender link for this organization
@@ -293,6 +324,12 @@ export class EProcureScraper implements ScraperProvider {
 						await page.waitForSelector("table.list_table", {
 							timeout: 10000,
 						});
+
+						// Check again after loading tender page
+						if (this.shouldStop()) {
+							this.logger.info(`Scraping stopped at tender page`);
+							break;
+						}
 
 						// UPDATED: Check if there are tenders available and scrape them with limit and date filtering
 						if (isTenderPerOrganizationLimited) {
@@ -521,6 +558,14 @@ export class EProcureScraper implements ScraperProvider {
 
 			// Now scrape detailed information for each tender (with limit applied)
 			for (let i = 0; i < limitedTenders.length; i++) {
+				// Check if scraping should stop before processing each tender
+				if (this.shouldStop()) {
+					this.logger.info(
+						`Scraping stopped during tender processing`
+					);
+					break;
+				}
+
 				try {
 					this.logger.info(
 						`Scraping detailed information for tender: ${limitedTenders[i].title}`
