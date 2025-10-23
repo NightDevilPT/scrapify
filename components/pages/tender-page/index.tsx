@@ -119,7 +119,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 
 		try {
 			// Start scraping session
-			const response = await apiService.post("/api/start-scraping", {
+			const response = await apiService.post("/api/scrape", {
 				provider: tenderType,
 				organizations: selectedOrganizations.map((org) => org.value),
 				tendersPerOrganization: tenderNumber,
@@ -143,8 +143,10 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 
 		try {
 			const response = await apiService.post(
-				`/api/sessions/${sessionStatus.runningSession.id}/stop`,
-				{}
+				`/api/scrape/stop`,
+				{
+					sessionId: sessionStatus.runningSession.id,
+				}
 			);
 
 			if (response.success) {

@@ -155,7 +155,7 @@ export class EProcureScraper implements ScraperProvider {
 			this.totalTendersScraped = 0;
 
 			// Initialize session stats
-			sessionManager.updateStats(this.sessionId, {
+			await sessionManager.updateStats(this.sessionId, {
 				organizationsFound: organizations.length,
 				organizationsScraped: 0,
 				tendersFound: 0,
@@ -274,7 +274,7 @@ export class EProcureScraper implements ScraperProvider {
 					this.logger.info(`Processing organization: ${orgName}`);
 
 					// Update session for current organization
-					sessionManager.updateCurrentActivity(
+					await sessionManager.updateCurrentActivity(
 						this.sessionId,
 						orgName,
 						"Fetching tender links"
@@ -387,11 +387,11 @@ export class EProcureScraper implements ScraperProvider {
 
 					// Update organization progress
 					currentOrganizationProgress += progressPerOrganization;
-					sessionManager.updateProgress(
+					await sessionManager.updateProgress(
 						this.sessionId,
 						currentOrganizationProgress
 					);
-					sessionManager.updateStats(this.sessionId, {
+					await sessionManager.updateStats(this.sessionId, {
 						organizationsScraped: index + 1,
 					});
 				} catch (error) {
@@ -412,11 +412,11 @@ export class EProcureScraper implements ScraperProvider {
 
 					// Still update progress even if organization fails
 					currentOrganizationProgress += progressPerOrganization;
-					sessionManager.updateProgress(
+					await sessionManager.updateProgress(
 						this.sessionId,
 						currentOrganizationProgress
 					);
-					sessionManager.updateStats(this.sessionId, {
+					await sessionManager.updateStats(this.sessionId, {
 						organizationsScraped: index + 1,
 					});
 
@@ -539,7 +539,7 @@ export class EProcureScraper implements ScraperProvider {
 
 			// FIXED: Accumulate tenders found across all organizations
 			this.totalTendersFound += filteredTenders.length;
-			sessionManager.updateStats(this.sessionId, {
+			await sessionManager.updateStats(this.sessionId, {
 				tendersFound: this.totalTendersFound,
 			});
 
@@ -572,7 +572,7 @@ export class EProcureScraper implements ScraperProvider {
 					);
 
 					// Update session for current tender
-					sessionManager.updateCurrentActivity(
+					await sessionManager.updateCurrentActivity(
 						this.sessionId,
 						orgName || "Unknown Organization",
 						`Scraping tender: ${limitedTenders[i].title}`
@@ -592,14 +592,14 @@ export class EProcureScraper implements ScraperProvider {
 					// Update progress for each tender scraped
 					if (progressPerTender > 0) {
 						tenderProgress += progressPerTender;
-						sessionManager.updateProgress(
+						await sessionManager.updateProgress(
 							this.sessionId,
 							tenderProgress
 						);
 					}
 
 					// Update tender scraped count (accumulated total)
-					sessionManager.updateStats(this.sessionId, {
+					await sessionManager.updateStats(this.sessionId, {
 						tenderScraped: this.totalTendersScraped,
 					});
 
@@ -627,14 +627,14 @@ export class EProcureScraper implements ScraperProvider {
 					// Still update progress even if tender fails
 					if (progressPerTender > 0) {
 						tenderProgress += progressPerTender;
-						sessionManager.updateProgress(
+						await sessionManager.updateProgress(
 							this.sessionId,
 							tenderProgress
 						);
 					}
 
 					// Update tender scraped count (accumulated total)
-					sessionManager.updateStats(this.sessionId, {
+					await sessionManager.updateStats(this.sessionId, {
 						tenderScraped: this.totalTendersScraped,
 					});
 				}
@@ -818,81 +818,114 @@ export class EProcureScraper implements ScraperProvider {
 
 			await page.waitForSelector(".page_content", { timeout: 10000 });
 
-			const tenderDetails = await page.evaluate(() => {
-				// Helper function to extract all key-value pairs from a table
-				const extractTableData = (table: HTMLTableElement) => {
-					const data: Record<string, string> = {};
-					const rows = table.querySelectorAll("tr");
+		const tenderDetails = await page.evaluate(() => {
+			// Helper function to convert string to camelCase
+			const toCamelCase = (str: string): string => {
+				return str
+					// Remove special characters except spaces and alphanumeric
+					.replace(/[^a-zA-Z0-9\s]/g, '')
+					// Split by spaces
+					.split(/\s+/)
+					// Filter out empty strings
+					.filter(word => word.length > 0)
+					// Convert to camelCase
+					.map((word, index) => {
+						// First word should be lowercase
+						if (index === 0) {
+							return word.charAt(0).toLowerCase() + word.slice(1).toLowerCase();
+						}
+						// Subsequent words should have first letter capitalized
+						return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+					})
+					.join('');
+			};
 
-					rows.forEach((row) => {
-						const cells = row.querySelectorAll("td");
+			// Helper function to extract all key-value pairs from a table
+			const extractTableData = (table: HTMLTableElement) => {
+				const data: Record<string, string> = {};
+				const rows = table.querySelectorAll("tr");
 
-						// Handle rows with 2 cells (key-value pairs)
-						if (cells.length === 2) {
+				rows.forEach((row) => {
+					const cells = row.querySelectorAll("td");
+
+					// Handle rows with 2 cells (key-value pairs)
+					if (cells.length === 2) {
+						const key =
+							cells[0].textContent
+								?.trim()
+								.replace(/[:*]$/, "")
+								.replace(/<[^>]*>/g, "") || "";
+						const value =
+							cells[1].textContent
+								?.trim()
+								.replace(/<[^>]*>/g, "") || "";
+
+						if (key && value) {
+							const camelCaseKey = toCamelCase(key);
+							if (camelCaseKey) {
+								data[camelCaseKey] = value;
+							}
+						}
+					}
+					// Handle rows with 4 cells (two key-value pairs in one row)
+					else if (cells.length === 4) {
+						const key1 =
+							cells[0].textContent
+								?.trim()
+								.replace(/[:*]$/, "")
+								.replace(/<[^>]*>/g, "") || "";
+						const value1 =
+							cells[1].textContent
+								?.trim()
+								.replace(/<[^>]*>/g, "") || "";
+						const key2 =
+							cells[2].textContent
+								?.trim()
+								.replace(/[:*]$/, "")
+								.replace(/<[^>]*>/g, "") || "";
+						const value2 =
+							cells[3].textContent
+								?.trim()
+								.replace(/<[^>]*>/g, "") || "";
+
+						if (key1 && value1) {
+							const camelCaseKey1 = toCamelCase(key1);
+							if (camelCaseKey1) {
+								data[camelCaseKey1] = value1;
+							}
+						}
+						if (key2 && value2) {
+							const camelCaseKey2 = toCamelCase(key2);
+							if (camelCaseKey2) {
+								data[camelCaseKey2] = value2;
+							}
+						}
+					}
+					// Handle rows with 6 cells (three key-value pairs in one row)
+					else if (cells.length === 6) {
+						for (let i = 0; i < 6; i += 2) {
 							const key =
-								cells[0].textContent
+								cells[i].textContent
 									?.trim()
 									.replace(/[:*]$/, "")
 									.replace(/<[^>]*>/g, "") || "";
 							const value =
-								cells[1].textContent
+								cells[i + 1].textContent
 									?.trim()
 									.replace(/<[^>]*>/g, "") || "";
 
 							if (key && value) {
-								data[key] = value;
-							}
-						}
-						// Handle rows with 4 cells (two key-value pairs in one row)
-						else if (cells.length === 4) {
-							const key1 =
-								cells[0].textContent
-									?.trim()
-									.replace(/[:*]$/, "")
-									.replace(/<[^>]*>/g, "") || "";
-							const value1 =
-								cells[1].textContent
-									?.trim()
-									.replace(/<[^>]*>/g, "") || "";
-							const key2 =
-								cells[2].textContent
-									?.trim()
-									.replace(/[:*]$/, "")
-									.replace(/<[^>]*>/g, "") || "";
-							const value2 =
-								cells[3].textContent
-									?.trim()
-									.replace(/<[^>]*>/g, "") || "";
-
-							if (key1 && value1) {
-								data[key1] = value1;
-							}
-							if (key2 && value2) {
-								data[key2] = value2;
-							}
-						}
-						// Handle rows with 6 cells (three key-value pairs in one row)
-						else if (cells.length === 6) {
-							for (let i = 0; i < 6; i += 2) {
-								const key =
-									cells[i].textContent
-										?.trim()
-										.replace(/[:*]$/, "")
-										.replace(/<[^>]*>/g, "") || "";
-								const value =
-									cells[i + 1].textContent
-										?.trim()
-										.replace(/<[^>]*>/g, "") || "";
-
-								if (key && value) {
-									data[key] = value;
+								const camelCaseKey = toCamelCase(key);
+								if (camelCaseKey) {
+									data[camelCaseKey] = value;
 								}
 							}
 						}
-					});
+					}
+				});
 
-					return data;
-				};
+				return data;
+			};
 
 				// Function to find table by header text
 				const findTableByHeader = (headerText: string) => {

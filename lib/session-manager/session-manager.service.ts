@@ -78,17 +78,23 @@ class SessionManager {
 			lastActivityAt: new Date(),
 			tenderScraped: 0,
 			errorMessage: undefined,
+			// Initialize estimated time fields
+			estimatedCompletionTime: undefined,
+			estimatedTimeRemaining: undefined,
+			estimatedTimeRemainingFormatted: undefined,
+			scrapingRate: undefined,
+			timePerTender: undefined,
 		};
 
 		this.activeSessions.set(sessionId, session);
 
 		if (data.id) {
 			console.log(
-				`🆕 Session created with provided ID: ${sessionId} for ${data.provider}`
+				`Session created with provided ID: ${sessionId} for ${data.provider}`
 			);
 		} else {
 			console.log(
-				`🆕 Session created with generated ID: ${sessionId} for ${data.provider}`
+				`Session created with generated ID: ${sessionId} for ${data.provider}`
 			);
 		}
 
@@ -102,7 +108,12 @@ class SessionManager {
 	 * Get session by ID
 	 */
 	public getSession(sessionId: string): IActiveSessionData | undefined {
-		return this.activeSessions.get(sessionId);
+		const session = this.activeSessions.get(sessionId);
+		if (session) {
+			// Recalculate estimated time to ensure it's up to date
+			this.calculateEstimatedTime(session);
+		}
+		return session;
 	}
 
 	/**
@@ -118,6 +129,15 @@ class SessionManager {
 				...updates,
 				lastActivityAt: new Date(),
 			});
+
+			// Calculate estimated time if relevant fields are updated
+			if (updates.tenderScraped !== undefined || updates.tendersFound !== undefined || updates.progress !== undefined || updates.organizationsScraped !== undefined) {
+				this.calculateEstimatedTime(session);
+				
+				// Force immediate update for estimated time fields to ensure they're saved
+				console.log(`Forcing immediate update for session ${sessionId} with estimated time data`);
+				await this.storeSessionInDatabase(session);
+			}
 
 			// Debounced database update
 			this.scheduleSessionUpdate(sessionId, session);
@@ -309,9 +329,9 @@ class SessionManager {
 				}
 			});
 
-			console.log(`📊 Batch updated ${sessionsToUpdate.length} sessions`);
+			console.log(`Batch updated ${sessionsToUpdate.length} sessions`);
 		} catch (error) {
-			console.error(`❌ Failed to batch update sessions:`, error);
+			console.error(`Failed to batch update sessions:`, error);
 
 			// Retry individual updates for failed sessions
 			for (const session of sessionsToUpdate) {
@@ -335,10 +355,10 @@ class SessionManager {
 	): Promise<void> {
 		try {
 			await this.upsertSessionInDatabase(this.prisma, session);
-			console.log(`💾 Session stored/updated in database: ${session.id}`);
+			console.log(`Session stored/updated in database: ${session.id}`);
 		} catch (error) {
 			console.error(
-				`❌ Failed to store session ${session.id} in database:`,
+				`Failed to store session ${session.id} in database:`,
 				error
 			);
 		}
@@ -381,6 +401,11 @@ class SessionManager {
 					completedAt: session.completedAt,
 					lastActivityAt: session.lastActivityAt,
 					errorMessage: session.errorMessage,
+					estimatedCompletionTime: session.estimatedCompletionTime,
+					estimatedTimeRemaining: session.estimatedTimeRemaining,
+					estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
+					scrapingRate: session.scrapingRate,
+					timePerTender: session.timePerTender,
 				},
 			});
 		} else {
@@ -408,6 +433,11 @@ class SessionManager {
 					completedAt: session.completedAt,
 					lastActivityAt: session.lastActivityAt,
 					errorMessage: session.errorMessage,
+					estimatedCompletionTime: session.estimatedCompletionTime,
+					estimatedTimeRemaining: session.estimatedTimeRemaining,
+					estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
+					scrapingRate: session.scrapingRate,
+					timePerTender: session.timePerTender,
 				},
 			});
 		}
@@ -426,7 +456,12 @@ class SessionManager {
 	 * Get all sessions
 	 */
 	public getAllSessions(): IActiveSessionData[] {
-		return Array.from(this.activeSessions.values());
+		const sessions = Array.from(this.activeSessions.values());
+		// Recalculate estimated time for all sessions to ensure they're up to date
+		sessions.forEach(session => {
+			this.calculateEstimatedTime(session);
+		});
+		return sessions;
 	}
 
 	/**
@@ -528,8 +563,127 @@ class SessionManager {
 			});
 
 			console.log(
-				`🧹 Cleaned up ${sessionsToRemove.length} old sessions`
+				`Cleaned up ${sessionsToRemove.length} old sessions`
 			);
+		}
+	}
+
+	/**
+	 * Calculate estimated completion time for a session
+	 */
+	private calculateEstimatedTime(session: IActiveSessionData): void {
+		try {
+			const now = new Date();
+			const elapsedTime = now.getTime() - session.startedAt.getTime();
+			
+			console.log(`Calculating estimated time for session ${session.id}:`, {
+				tenderScraped: session.tenderScraped,
+				tendersFound: session.tendersFound,
+				progress: session.progress,
+				elapsedTime: elapsedTime
+			});
+			
+			// Calculate if we have some progress and elapsed time
+			if (session.progress > 0 && elapsedTime > 0) {
+				// If we have scraped tenders, use that for rate calculation
+				if (session.tenderScraped > 0) {
+					// Calculate scraping rate (tenders per minute)
+					const elapsedMinutes = elapsedTime / (1000 * 60);
+					const scrapingRate = session.tenderScraped / elapsedMinutes;
+					
+					// Calculate time per tender (milliseconds)
+					const timePerTender = elapsedTime / session.tenderScraped;
+					
+					// Calculate remaining tenders based on progress
+					const totalEstimatedTenders = session.tendersFound > 0 
+						? session.tendersFound 
+						: Math.round(session.tenderScraped / (session.progress / 100));
+					
+					const remainingTenders = Math.max(0, totalEstimatedTenders - session.tenderScraped);
+					
+					// Calculate estimated time remaining
+					const estimatedTimeRemaining = remainingTenders * timePerTender;
+					
+					// Calculate estimated completion time
+					const estimatedCompletionTime = new Date(now.getTime() + estimatedTimeRemaining);
+					
+					// Format estimated time remaining
+					const estimatedTimeRemainingFormatted = this.formatDuration(estimatedTimeRemaining);
+					
+					// Update session with calculated values
+					session.scrapingRate = parseFloat(scrapingRate.toFixed(2));
+					session.timePerTender = Math.round(timePerTender);
+					session.estimatedTimeRemaining = Math.round(estimatedTimeRemaining);
+					session.estimatedTimeRemainingFormatted = estimatedTimeRemainingFormatted;
+					session.estimatedCompletionTime = estimatedCompletionTime;
+					
+					console.log(`Estimated time calculated:`, {
+						scrapingRate: session.scrapingRate,
+						estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
+						estimatedCompletionTime: session.estimatedCompletionTime
+					});
+					
+					// Force immediate database update for estimated time fields
+					this.storeSessionInDatabase(session);
+				} else {
+					// If no tenders scraped yet, estimate based on progress and organizations
+					if (session.organizationsScraped > 0 && session.organizationsFound > 0) {
+						const progressRate = session.progress / 100;
+						const totalEstimatedTime = elapsedTime / progressRate;
+						const estimatedTimeRemaining = totalEstimatedTime - elapsedTime;
+						
+						// Calculate estimated completion time
+						const estimatedCompletionTime = new Date(now.getTime() + estimatedTimeRemaining);
+						
+						// Format estimated time remaining
+						const estimatedTimeRemainingFormatted = this.formatDuration(estimatedTimeRemaining);
+						
+						// Update session with calculated values
+						session.estimatedTimeRemaining = Math.round(estimatedTimeRemaining);
+						session.estimatedTimeRemainingFormatted = estimatedTimeRemainingFormatted;
+						session.estimatedCompletionTime = estimatedCompletionTime;
+						
+						console.log(`Estimated time calculated based on progress:`, {
+							estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
+							estimatedCompletionTime: session.estimatedCompletionTime
+						});
+						
+						// Force immediate database update for estimated time fields
+						this.storeSessionInDatabase(session);
+					}
+				}
+			} else {
+				// Reset estimates if not enough data
+				session.scrapingRate = undefined;
+				session.timePerTender = undefined;
+				session.estimatedTimeRemaining = undefined;
+				session.estimatedTimeRemainingFormatted = undefined;
+				session.estimatedCompletionTime = undefined;
+				
+				console.log(`Not enough data for estimation, resetting values`);
+			}
+		} catch (error) {
+			console.error('Error calculating estimated time:', error);
+		}
+	}
+
+	/**
+	 * Format duration in milliseconds to human readable string
+	 */
+	private formatDuration(milliseconds: number): string {
+		const seconds = Math.floor(milliseconds / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		const days = Math.floor(hours / 24);
+
+		if (days > 0) {
+			return `${days}d ${hours % 24}h ${minutes % 60}m`;
+		} else if (hours > 0) {
+			return `${hours}h ${minutes % 60}m`;
+		} else if (minutes > 0) {
+			return `${minutes}m ${seconds % 60}s`;
+		} else {
+			return `${seconds}s`;
 		}
 	}
 

@@ -58,6 +58,13 @@ model ScrapingSession {
   // Error information (for failed sessions)
   errorMessage            String?
   
+  // Estimated time fields
+  estimatedCompletionTime DateTime?
+  estimatedTimeRemaining  Int?             // in milliseconds
+  estimatedTimeRemainingFormatted String?
+  scrapingRate           Float?           // tenders per minute
+  timePerTender          Int?             // milliseconds per tender
+  
   // Metadata
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt

@@ -139,20 +139,41 @@ export async function GET(
 		// Current active sessions with progress details for filtered sessions
 		const activeSessionsData = filteredSessions
 			.filter((session) => session.status === "RUNNING")
-			.map((session) => ({
-				id: session.id,
-				name: session.name,
-				provider: session.provider,
-				progress: session.progress,
-				currentOrganization: session.currentOrganization,
-				currentStage: session.currentStage,
-				startedAt: session.startedAt.toISOString(),
-				lastActivityAt: session.lastActivityAt.toISOString(),
-				organizationsScraped: session.organizationsScraped,
-				organizationsFound: session.organizationsFound,
-				tendersFound: session.tendersFound,
-				tenderScraped: session.tenderScraped,
-			}))
+			.map((session) => {
+				const sessionData = {
+					id: session.id,
+					name: session.name,
+					provider: session.provider,
+					progress: session.progress,
+					currentOrganization: session.currentOrganization,
+					currentStage: session.currentStage,
+					startedAt: session.startedAt.toISOString(),
+					lastActivityAt: session.lastActivityAt.toISOString(),
+					organizationsScraped: session.organizationsScraped,
+					organizationsFound: session.organizationsFound,
+					tendersFound: session.tendersFound,
+					tenderScraped: session.tenderScraped,
+					// Include estimated time fields from database
+					estimatedCompletionTime: session.estimatedCompletionTime?.toISOString(),
+					estimatedTimeRemaining: session.estimatedTimeRemaining,
+					estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
+					scrapingRate: session.scrapingRate,
+					timePerTender: session.timePerTender,
+				};
+				
+				// Debug log for estimated time fields
+				console.log(`Tender-specific session ${session.id} estimated time data from database:`, {
+					estimatedCompletionTime: session.estimatedCompletionTime,
+					estimatedTimeRemaining: session.estimatedTimeRemaining,
+					estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
+					scrapingRate: session.scrapingRate,
+					timePerTender: session.timePerTender,
+					tenderScraped: session.tenderScraped,
+					progress: session.progress
+				});
+				
+				return sessionData;
+			})
 			.sort(
 				(a, b) =>
 					new Date(b.lastActivityAt).getTime() -

@@ -42,6 +42,12 @@ export interface SessionOverview {
 		organizationsFound: number;
 		tendersFound: number;
 		tenderScraped: number;
+		// Estimated time fields
+		estimatedCompletionTime?: string;
+		estimatedTimeRemaining?: number;
+		estimatedTimeRemainingFormatted?: string;
+		scrapingRate?: number;
+		timePerTender?: number;
 	}>;
 	performance: {
 		averageProgress: number;

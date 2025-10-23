@@ -57,6 +57,13 @@ export interface IActiveSessionData {
 	lastActivityAt: Date;
 
 	errorMessage?: string; // Added for failed sessions
+
+	// Estimated time fields
+	estimatedCompletionTime?: Date;
+	estimatedTimeRemaining?: number; // in milliseconds
+	estimatedTimeRemainingFormatted?: string;
+	scrapingRate?: number; // tenders per minute
+	timePerTender?: number; // milliseconds per tender
 }
 
 export interface ISessionStats {
