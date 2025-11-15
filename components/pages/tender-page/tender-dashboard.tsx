@@ -22,6 +22,7 @@ import {
 } from "@/components/shared/summary-card";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import apiService from "@/lib/api-service/api.service";
 import { ApiResponse } from "@/interface/api.interface";
 import { ActiveSessionCard } from "@/components/shared/active-session";
@@ -293,9 +294,9 @@ export function TenderDashboard({ tenderType }: TenderDashboardProps) {
 	// };
 
 	return (
-		<div className="space-y-6">
-			{/* Summary Metrics */}
-			<div className="grid grid-cols-3 max-xl:grid-cols-2 gap-4">
+		<div className="space-y-6 w-full max-w-full overflow-x-hidden">
+			{/* Summary Metrics - Professional Grid Layout */}
+			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 w-full">
 				{summaryCards.map((card, index) => (
 					<SummaryCard
 						key={index}
@@ -308,53 +309,30 @@ export function TenderDashboard({ tenderType }: TenderDashboardProps) {
 				))}
 			</div>
 
-			{/* Status Distribution */}
-			{/* <Card>
-				<CardHeader>
-					<CardTitle>Session Status Distribution</CardTitle>
-					<CardDescription>
-						Breakdown of session statuses for {tenderType}
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-						{statusDistribution
-							.filter((status) => status.count > 0)
-							.map((status) => (
-								<div
-									key={status.status}
-									className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 ${getStatusColor(
-										status.status
-									)}`}
-								>
-									<span className="text-2xl font-bold">
-										{status.count}
-									</span>
-									<span className="text-sm font-medium capitalize">
-										{status.status.toLowerCase()}
-									</span>
-									<span className="text-xs text-muted-foreground">
-										{status.percentage}%
-									</span>
-								</div>
-							))}
-					</div>
-				</CardContent>
-			</Card> */}
-
-			{/* Active Sessions */}
-			<Card>
-				<CardHeader>
-					<CardTitle>Active {tenderType} Sessions</CardTitle>
-					<CardDescription>
-						{activeSessions.length} session
-						{activeSessions.length !== 1 ? "s" : ""} currently
-						running
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{activeSessions.length > 0 ? (
-						<div className="space-y-4">
+			{/* Active Sessions - Professional Card */}
+			{activeSessions.length > 0 && (
+				<Card className="shadow-sm">
+					<CardHeader className="pb-4">
+						<div className="flex items-center justify-between">
+							<div>
+								<CardTitle className="text-xl font-semibold">
+									Active {tenderType} Sessions
+								</CardTitle>
+								<CardDescription className="mt-1">
+									{activeSessions.length} session
+									{activeSessions.length !== 1
+										? "s"
+										: ""}{" "}
+									currently running
+								</CardDescription>
+							</div>
+							<Badge variant="secondary" className="text-sm">
+								{activeSessions.length} Active
+							</Badge>
+						</div>
+					</CardHeader>
+					<CardContent>
+						<div className="space-y-3">
 							{activeSessions.map((session) => (
 								<ActiveSessionCard
 									key={session.id}
@@ -362,82 +340,9 @@ export function TenderDashboard({ tenderType }: TenderDashboardProps) {
 								/>
 							))}
 						</div>
-					) : (
-						<div className="text-center py-8 text-muted-foreground">
-							<Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-							<p>No active {tenderType} sessions</p>
-						</div>
-					)}
-				</CardContent>
-			</Card>
-
-			{/* Performance and Recent Activity */}
-			{/* <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				<Card>
-					<CardHeader>
-						<CardTitle>Performance Metrics</CardTitle>
-						<CardDescription>
-							{tenderType} scraping performance
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						{healthMetrics.map((metric, index) => (
-							<HealthMetric
-								key={index}
-								label={metric.label}
-								value={metric.value}
-								description={metric.description}
-								status={metric.status}
-							/>
-						))}
 					</CardContent>
 				</Card>
-
-				<Card>
-					<CardHeader>
-						<CardTitle>Recent Activity</CardTitle>
-						<CardDescription>
-							Last 24 hours activity for {tenderType}
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<div className="space-y-4">
-							<div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-								<span className="font-medium">
-									Total Sessions
-								</span>
-								<Badge variant="secondary">
-									{recentActivity.last24Hours}
-								</Badge>
-							</div>
-							<div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-								<span className="font-medium">
-									New Sessions
-								</span>
-								<Badge variant="secondary">
-									{recentActivity.newSessionsLast24Hours}
-								</Badge>
-							</div>
-							<div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-								<span className="font-medium">
-									Success Rate
-								</span>
-								<Badge variant="secondary">
-									{systemHealth.successRate}%
-								</Badge>
-							</div>
-							<div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-								<span className="font-medium">
-									Tenders Processed
-								</span>
-								<Badge variant="secondary">
-									{performance.totalTendersProcessed.toLocaleString()}
-								</Badge>
-							</div>
-						</div>
-					</CardContent>
-				</Card>
-			</div> */}
+			)}
 		</div>
 	);
 }

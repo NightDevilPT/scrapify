@@ -25,6 +25,8 @@ import { TooltipComponent } from "@/components/shared/tooltip";
 import { OrganizationInfo } from "@/lib/scraper/scraper.interface";
 import FilterComponent from "@/components/shared/filter-component";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { TenderTable } from "@/components/shared/tender-table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface TenderPageProps {
 	tenderType: string;
@@ -142,12 +144,9 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 		if (!sessionStatus.runningSession?.id) return;
 
 		try {
-			const response = await apiService.post(
-				`/api/scrape/stop`,
-				{
-					sessionId: sessionStatus.runningSession.id,
-				}
-			);
+			const response = await apiService.post(`/api/scrape/stop`, {
+				sessionId: sessionStatus.runningSession.id,
+			});
 
 			if (response.success) {
 				// Refresh session status
@@ -213,53 +212,27 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 	}, [sessionStatus.isRunning]);
 
 	return (
-		<div className="w-full space-y-6 px-2">
-			{/* Main Card with Header and Controls */}
-			<Card className="border-none bg-transparent p-0">
-				<CardHeader className="px-0">
-					<CardTitle className="flex items-center justify-between text-xl">
-						{/* <div className="flex items-center gap-3">
-							<Building2 className="h-6 w-6 text-muted-foreground" />
-							<span>Tender Type - {tenderType}</span>
-							<Badge variant="secondary" className="text-sm">
-								{selectedOrganizations.length} selected
-							</Badge>
-							{sessionStatus.isRunning && (
-								<Badge
-									variant="default"
-									className="bg-green-600 text-sm"
-								>
-									<Loader2 className="h-3 w-3 animate-spin mr-1" />
-									Running
-									{sessionStatus.runningSession?.progress && (
-										<span className="ml-1">
-											(
-											{
-												sessionStatus.runningSession
-													.progress
-											}
-											%)
-										</span>
-									)}
-								</Badge>
-							)}
-						</div> */}
-						<div className="flex items-center gap-4 justify-between">
-							<Building2 className="h-10 w-10" />
-							<div className="grid grid-cols-1 gap-0">
-								<h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+		<div className="w-full space-y-4 px-2">
+			{/* Compact Header Card */}
+			<Card className="overflow-hidden">
+				<CardHeader className="pb-3">
+					<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+						<div className="flex items-center gap-3 min-w-0 flex-1">
+							<Building2 className="h-8 w-8 text-primary flex-shrink-0" />
+							<div className="min-w-0 flex-1">
+								<CardTitle className="text-lg flex items-center gap-2 truncate">
 									{tenderType} Dashboard
-								</h2>
-								<Label className="text-muted-foreground text-sm">
-									Overview of {tenderType} scraping sessions
-									and performance
+									{sessionStatus.isRunning && (
+										<Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
+									)}
+								</CardTitle>
+								<Label className="text-muted-foreground text-xs mt-1 block truncate">
+									{selectedOrganizations.length} organizations
+									selected
 								</Label>
 							</div>
-							<Badge variant="secondary" className="text-sm">
-								{selectedOrganizations.length} selected
-							</Badge>
 						</div>
-						<div className="flex items-center gap-3">
+						<div className="flex items-center gap-2 flex-wrap">
 							{/* Filter Popover Trigger */}
 							<Popover
 								open={filterPopoverOpen}
@@ -268,6 +241,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 								<PopoverTrigger asChild>
 									<Button
 										variant="outline"
+										size="sm"
 										className="flex items-center gap-2"
 									>
 										<Filter className="h-4 w-4" />
@@ -275,7 +249,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 										{selectedOrganizations.length > 0 && (
 											<Badge
 												variant="secondary"
-												className="ml-1 h-5 w-5 p-0 flex items-center justify-center"
+												className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
 											>
 												{selectedOrganizations.length}
 											</Badge>
@@ -320,6 +294,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 							>
 								<Button
 									variant={"outline"}
+									size="sm"
 									onClick={handleStartScraping}
 									disabled={
 										sessionStatus.isRunning ||
@@ -338,15 +313,10 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 							</TooltipComponent>
 
 							{sessionStatus.isRunning && (
-								<TooltipComponent
-									content={
-										sessionStatus.isRunning
-											? "Stop current scraping session"
-											: "No active session to stop"
-									}
-								>
+								<TooltipComponent content="Stop current scraping session">
 									<Button
 										variant={"destructive"}
+										size="sm"
 										onClick={handleStopScraping}
 										disabled={
 											!sessionStatus.isRunning ||
@@ -371,6 +341,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 									loading || !tenderType || checkingSession
 								}
 								variant="outline"
+								size="sm"
 								className="flex items-center gap-2"
 							>
 								{loading || checkingSession ? (
@@ -381,12 +352,15 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 								Refresh
 							</Button>
 						</div>
-					</CardTitle>
+					</div>
 				</CardHeader>
 			</Card>
 
-			{/* Tender Dashboard - Now properly displayed without filter component taking space */}
+			{/* Tender Dashboard */}
 			<TenderDashboard tenderType={tenderType} />
+
+			{/* Tenders Table - Separate Component */}
+			<TenderTable provider={tenderType} />
 		</div>
 	);
 };

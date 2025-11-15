@@ -461,14 +461,29 @@ class TenderService {
 				where.sessionId = options.sessionId;
 			}
 
-			const tenders = await prisma.tender.findMany({
+			// Build query options
+			const queryOptions: any = {
 				where,
 				orderBy: {
 					createdAt: "desc",
 				},
-				take: options?.limit,
-				skip: options?.offset,
-			});
+			};
+
+			// Only apply limit and offset if they are explicitly provided
+			// This ensures we get ALL records when limit is not specified
+			if (options?.limit !== undefined && options.limit !== null) {
+				queryOptions.take = options.limit;
+			}
+			
+			if (options?.offset !== undefined && options.offset !== null) {
+				queryOptions.skip = options.offset;
+			}
+
+			const tenders = await prisma.tender.findMany(queryOptions);
+
+			this.logger.info(
+				`Fetched ${tenders.length} tenders${options?.limit ? ` (limited to ${options.limit})` : " (all records)"} for provider: ${options?.provider || "all"}`
+			);
 
 			return tenders;
 		} catch (error) {
