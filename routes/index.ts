@@ -1,3 +1,4 @@
+import { ScrapingProvider } from "@prisma/client";
 import {
 	Building,
 	LayoutDashboard,
@@ -26,24 +27,24 @@ export const Routes: IRoute[] = [
 	{
 		id: crypto.randomUUID(),
 		label: "E-Procure",
-		url: "/scrapper/EPROCURE",
+		url: "/scrapper/"+ScrapingProvider.EPROCURE,
 		icon: Building,
-		tenderType: "EPROCURE",
+		tenderType: ScrapingProvider.EPROCURE,
 	},
-	{
-		id: crypto.randomUUID(),
-		label: "Gem",
-		url: "/scrapper/GEM",
-		icon: PocketKnife,
-		tenderType: "GEM",
-	},
-	{
-		id: crypto.randomUUID(),
-		label: "Cpp-Portal",
-		url: "/scrapper/CPP_PORTAL",
-		icon: Puzzle,
-		tenderType: "CPP_PORTAL",
-	},
+	// {
+	// 	id: crypto.randomUUID(),
+	// 	label: "Gem",
+	// 	url: "/scrapper/GEM",
+	// 	icon: PocketKnife,
+	// 	tenderType: "GEM",
+	// },
+	// {
+	// 	id: crypto.randomUUID(),
+	// 	label: "Cpp-Portal",
+	// 	url: "/scrapper/CPP_PORTAL",
+	// 	icon: Puzzle,
+	// 	tenderType: "CPP_PORTAL",
+	// },
 	{
 		id: crypto.randomUUID(),
 		label: "Settings",

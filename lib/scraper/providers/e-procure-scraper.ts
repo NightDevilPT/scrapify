@@ -8,6 +8,10 @@ import { isDateInRange } from "@/lib/utils";
 import puppeteer, { Page } from "puppeteer";
 import { LoggerService } from "@/lib/logger-service/logger.service";
 import { sessionManager } from "@/lib/session-manager/session-manager.service";
+import { tenderService } from "@/lib/tender-service/tender.service";
+import { ScrapedTenderData } from "@/interface/tender.interface";
+import { ScrapingProvider } from "@prisma/client";
+import crypto from "crypto";
 
 interface ITendersLinkInfo {
 	title: string;
@@ -26,6 +30,8 @@ export class EProcureScraper implements ScraperProvider {
 	private sessionId: string = "";
 	private totalTendersFound: number = 0;
 	private totalTendersScraped: number = 0;
+	private totalTendersSaved: number = 0;
+	private totalPagesNavigated: number = 0;
 	private isStopped: boolean = false;
 
 	constructor() {
@@ -57,6 +63,7 @@ export class EProcureScraper implements ScraperProvider {
 				waitUntil: "networkidle2",
 				timeout: 30000,
 			});
+			// Note: No session tracking in getOrganizations as it's called before session creation
 
 			// Wait for the table to load
 			await page.waitForSelector("table.list_table", { timeout: 10000 });
@@ -153,6 +160,8 @@ export class EProcureScraper implements ScraperProvider {
 			// Reset counters for new session
 			this.totalTendersFound = 0;
 			this.totalTendersScraped = 0;
+			this.totalTendersSaved = 0;
+			this.totalPagesNavigated = 0;
 
 			// Initialize session stats
 			await sessionManager.updateStats(this.sessionId, {
@@ -178,6 +187,7 @@ export class EProcureScraper implements ScraperProvider {
 				waitUntil: "networkidle2",
 				timeout: 30000,
 			});
+			await this.trackPageNavigation("Initial page load");
 
 			await page.waitForSelector("table.list_table", { timeout: 10000 });
 
@@ -230,6 +240,21 @@ export class EProcureScraper implements ScraperProvider {
 			return true;
 		}
 		return false;
+	}
+
+	// Track page navigation and update session stats
+	private async trackPageNavigation(description?: string): Promise<void> {
+		try {
+			this.totalPagesNavigated++;
+			await sessionManager.updateStats(this.sessionId, {
+				pagesNavigated: this.totalPagesNavigated,
+			});
+			if (description) {
+				this.logger.info(`Page navigation tracked: ${description} (Total: ${this.totalPagesNavigated})`);
+			}
+		} catch (error) {
+			this.logger.error(`Failed to track page navigation: ${error}`);
+		}
 	}
 
 	// =================================================== //
@@ -289,6 +314,7 @@ export class EProcureScraper implements ScraperProvider {
 							waitUntil: "networkidle2",
 							timeout: 30000,
 						});
+						await this.trackPageNavigation(`Navigate to main organizations page for ${orgName}`);
 						await page.waitForSelector("table.list_table", {
 							timeout: 10000,
 						});
@@ -319,6 +345,7 @@ export class EProcureScraper implements ScraperProvider {
 							waitUntil: "networkidle2",
 							timeout: 30000,
 						});
+						await this.trackPageNavigation(`Navigate to tender listing page for ${orgName}`);
 
 						// Wait for the tender table to load
 						await page.waitForSelector("table.list_table", {
@@ -371,6 +398,7 @@ export class EProcureScraper implements ScraperProvider {
 							waitUntil: "networkidle2",
 							timeout: 30000,
 						});
+						await this.trackPageNavigation(`Navigate back to main page after processing ${orgName}`);
 						await page.waitForSelector("table.list_table", {
 							timeout: 10000,
 						});
@@ -427,6 +455,7 @@ export class EProcureScraper implements ScraperProvider {
 								waitUntil: "networkidle2",
 								timeout: 30000,
 							});
+							await this.trackPageNavigation(`Recovery navigation to main page after error in ${orgName}`);
 							await page.waitForSelector("table.list_table", {
 								timeout: 10000,
 							});
@@ -581,13 +610,48 @@ export class EProcureScraper implements ScraperProvider {
 					const tenderDetails = await this.scrapeTenderDetails(
 						page,
 						limitedTenders[i].tenderLink,
-						baseUrl
+						baseUrl,
+						orgName || "Unknown Organization",
+						limitedTenders[i].organizationChain,
+						limitedTenders[i].referenceNumber
 					);
 
 					limitedTenders[i].tenderDetails = tenderDetails;
 
 					// FIXED: Accumulate tenders scraped across all organizations
 					this.totalTendersScraped++;
+
+					// Save tender to database if scraped successfully
+					if (tenderDetails) {
+						try {
+							const saveResult = await tenderService.saveTender(tenderDetails);
+							
+							if (saveResult.isNew || saveResult.isUpdated) {
+								this.totalTendersSaved++;
+								this.logger.success(
+									`Tender saved successfully: ${tenderDetails.tenderId} (${saveResult.isNew ? "new" : "updated to version " + saveResult.tender.version})`
+								);
+							} else {
+								this.logger.info(
+									`Tender unchanged, skipped save: ${tenderDetails.tenderId}`
+								);
+							}
+
+							// Update tenders saved count in session stats
+							await sessionManager.updateStats(this.sessionId, {
+								tendersSaved: this.totalTendersSaved,
+							});
+						} catch (saveError) {
+							const errorMessage =
+								saveError instanceof Error
+									? saveError.message
+									: "Unknown error occurred";
+							this.logger.error(
+								`Error saving tender ${tenderDetails.tenderId}: ${errorMessage}`
+							);
+							// Continue processing even if save fails
+						}
+					}
 
 					// Update progress for each tender scraped
 					if (progressPerTender > 0) {
@@ -608,6 +672,7 @@ export class EProcureScraper implements ScraperProvider {
 						waitUntil: "networkidle2",
 						timeout: 30000,
 					});
+					await this.trackPageNavigation(`Navigate back to tender listing after scraping tender details`);
 					await page.waitForSelector("table.list_table", {
 						timeout: 10000,
 					});
@@ -806,8 +871,11 @@ export class EProcureScraper implements ScraperProvider {
 	private async scrapeTenderDetails(
 		page: Page,
 		tenderLink: string,
-		baseUrl: string
-	): Promise<any> {
+		baseUrl: string,
+		organisation: string,
+		organisationChain: string,
+		referenceNumber: string
+	): Promise<ScrapedTenderData | null> {
 		try {
 			this.logger.info(`Scraping tender details from: ${tenderLink}`);
 
@@ -815,152 +883,51 @@ export class EProcureScraper implements ScraperProvider {
 				waitUntil: "networkidle2",
 				timeout: 30000,
 			});
+			await this.trackPageNavigation(`Navigate to tender details page`);
 
 			await page.waitForSelector(".page_content", { timeout: 10000 });
 
-		const tenderDetails = await page.evaluate(() => {
-			// Helper function to convert string to camelCase
-			const toCamelCase = (str: string): string => {
-				return str
-					// Remove special characters except spaces and alphanumeric
-					.replace(/[^a-zA-Z0-9\s]/g, '')
-					// Split by spaces
-					.split(/\s+/)
-					// Filter out empty strings
-					.filter(word => word.length > 0)
-					// Convert to camelCase
-					.map((word, index) => {
-						// First word should be lowercase
-						if (index === 0) {
-							return word.charAt(0).toLowerCase() + word.slice(1).toLowerCase();
-						}
-						// Subsequent words should have first letter capitalized
-						return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-					})
-					.join('');
-			};
+			const scrapedData = await page.evaluate(() => {
+				// Helper function to extract text content from element
+				const getText = (element: Element | null): string => {
+					if (!element) return "";
+					// Get text content and clean it
+					let text = element.textContent || "";
+					// Replace HTML entities
+					text = text.replace(/&nbsp;/g, " ");
+					text = text.replace(/\u00A0/g, " "); // Non-breaking space
+					text = text.replace(/&amp;/g, "&");
+					text = text.replace(/&lt;/g, "<");
+					text = text.replace(/&gt;/g, ">");
+					// Remove HTML tags if any
+					text = text.replace(/<[^>]*>/g, "");
+					// Trim and normalize whitespace
+					return text.trim().replace(/\s+/g, " ");
+				};
 
-			// Helper function to extract all key-value pairs from a table
-			const extractTableData = (table: HTMLTableElement) => {
-				const data: Record<string, string> = {};
-				const rows = table.querySelectorAll("tr");
-
-				rows.forEach((row) => {
-					const cells = row.querySelectorAll("td");
-
-					// Handle rows with 2 cells (key-value pairs)
-					if (cells.length === 2) {
-						const key =
-							cells[0].textContent
-								?.trim()
-								.replace(/[:*]$/, "")
-								.replace(/<[^>]*>/g, "") || "";
-						const value =
-							cells[1].textContent
-								?.trim()
-								.replace(/<[^>]*>/g, "") || "";
-
-						if (key && value) {
-							const camelCaseKey = toCamelCase(key);
-							if (camelCaseKey) {
-								data[camelCaseKey] = value;
-							}
-						}
-					}
-					// Handle rows with 4 cells (two key-value pairs in one row)
-					else if (cells.length === 4) {
-						const key1 =
-							cells[0].textContent
-								?.trim()
-								.replace(/[:*]$/, "")
-								.replace(/<[^>]*>/g, "") || "";
-						const value1 =
-							cells[1].textContent
-								?.trim()
-								.replace(/<[^>]*>/g, "") || "";
-						const key2 =
-							cells[2].textContent
-								?.trim()
-								.replace(/[:*]$/, "")
-								.replace(/<[^>]*>/g, "") || "";
-						const value2 =
-							cells[3].textContent
-								?.trim()
-								.replace(/<[^>]*>/g, "") || "";
-
-						if (key1 && value1) {
-							const camelCaseKey1 = toCamelCase(key1);
-							if (camelCaseKey1) {
-								data[camelCaseKey1] = value1;
-							}
-						}
-						if (key2 && value2) {
-							const camelCaseKey2 = toCamelCase(key2);
-							if (camelCaseKey2) {
-								data[camelCaseKey2] = value2;
-							}
-						}
-					}
-					// Handle rows with 6 cells (three key-value pairs in one row)
-					else if (cells.length === 6) {
-						for (let i = 0; i < 6; i += 2) {
-							const key =
-								cells[i].textContent
-									?.trim()
-									.replace(/[:*]$/, "")
-									.replace(/<[^>]*>/g, "") || "";
-							const value =
-								cells[i + 1].textContent
-									?.trim()
-									.replace(/<[^>]*>/g, "") || "";
-
-							if (key && value) {
-								const camelCaseKey = toCamelCase(key);
-								if (camelCaseKey) {
-									data[camelCaseKey] = value;
-								}
-							}
-						}
-					}
-				});
-
-				return data;
-			};
-
-				// Function to find table by header text
-				const findTableByHeader = (headerText: string) => {
+				// Helper function to find table by header text
+				const findTableByHeader = (headerText: string): HTMLTableElement | null => {
 					const headers = document.querySelectorAll(".pageheader");
 
 					for (const header of Array.from(headers)) {
 						if (header.textContent?.includes(headerText)) {
-							// Navigate to find the associated table
 							let currentElement: Element | null = header;
 
-							// Go up until we find a container, then look for tablebg
 							while (currentElement) {
 								currentElement = currentElement.parentElement;
 								if (currentElement) {
-									const table =
-										currentElement.querySelector(
-											"table.tablebg"
-										);
+									const table = currentElement.querySelector("table.tablebg");
 									if (table) {
 										return table as HTMLTableElement;
 									}
 
-									// Also check next siblings
-									let nextSibling =
-										currentElement.nextElementSibling;
+									let nextSibling = currentElement.nextElementSibling;
 									while (nextSibling) {
-										const table =
-											nextSibling.querySelector(
-												"table.tablebg"
-											);
+										const table = nextSibling.querySelector("table.tablebg");
 										if (table) {
 											return table as HTMLTableElement;
 										}
-										nextSibling =
-											nextSibling.nextElementSibling;
+										nextSibling = nextSibling.nextElementSibling;
 									}
 								}
 							}
@@ -969,71 +936,260 @@ export class EProcureScraper implements ScraperProvider {
 					return null;
 				};
 
-				// Extract Basic Details - this has the complex structure with multiple columns
+				// Helper function to get value from table by key
+				const getValueFromTable = (table: HTMLTableElement | null, keyText: string): string => {
+					if (!table) return "";
+
+					const rows = table.querySelectorAll("tr");
+					for (const row of Array.from(rows)) {
+						const cells = row.querySelectorAll("td");
+						
+						for (let i = 0; i < cells.length - 1; i += 2) {
+							const key = getText(cells[i]);
+							if (key.toLowerCase().includes(keyText.toLowerCase())) {
+								return getText(cells[i + 1]);
+							}
+						}
+						
+						// Handle 4-cell rows (2 key-value pairs)
+						if (cells.length === 4) {
+							const key1 = getText(cells[0]);
+							const value1 = getText(cells[1]);
+							const key2 = getText(cells[2]);
+							const value2 = getText(cells[3]);
+
+							if (key1.toLowerCase().includes(keyText.toLowerCase())) {
+								return value1;
+							}
+							if (key2.toLowerCase().includes(keyText.toLowerCase())) {
+								return value2;
+							}
+						}
+						
+						// Handle 6-cell rows (3 key-value pairs)
+						if (cells.length === 6) {
+							for (let i = 0; i < 6; i += 2) {
+								const key = getText(cells[i]);
+								const value = getText(cells[i + 1]);
+								if (key.toLowerCase().includes(keyText.toLowerCase())) {
+									return value;
+								}
+							}
+						}
+					}
+					return "";
+				};
+
+				// Extract all sections
 				const basicDetailsTable = findTableByHeader("Basic Details");
-				const basicDetails = basicDetailsTable
-					? extractTableData(basicDetailsTable)
-					: {};
-
-				// Extract Tender Fee Details
-				const tenderFeeTable = findTableByHeader("Tender Fee Details");
-				const tenderFeeDetails = tenderFeeTable
-					? extractTableData(tenderFeeTable)
-					: {};
-
-				// Extract EMD Fee Details
-				const emdFeeTable = findTableByHeader("EMD Fee Details");
-				const emdFeeDetails = emdFeeTable
-					? extractTableData(emdFeeTable)
-					: {};
-
-				// Extract Work Item Details
 				const workItemTable = findTableByHeader("Work Item Details");
-				const workItemDetails = workItemTable
-					? extractTableData(workItemTable)
-					: {};
-
-				// Extract Critical Dates
+				const emdFeeTable = findTableByHeader("EMD Fee Details");
 				const criticalDatesTable = findTableByHeader("Critical Dates");
-				const criticalDates = criticalDatesTable
-					? extractTableData(criticalDatesTable)
-					: {};
+				const authorityTable = findTableByHeader("Tender Inviting Authority");
 
-				// Extract Tender Inviting Authority
-				const authorityTable = findTableByHeader(
-					"Tender Inviting Authority"
-				);
-				const tenderAuthority = authorityTable
-					? extractTableData(authorityTable)
-					: {};
+				// Extract specific fields
+				const organisationChain = getValueFromTable(basicDetailsTable, "Organisation Chain");
+				const tenderId = getValueFromTable(basicDetailsTable, "Tender ID");
+				const tenderRefNo = getValueFromTable(basicDetailsTable, "Tender Reference Number");
+				
+				const workDescription = getValueFromTable(workItemTable, "Work Description");
+				const title = getValueFromTable(workItemTable, "Title");
+				const tenderValueText = getValueFromTable(workItemTable, "Tender Value");
+				const location = getValueFromTable(workItemTable, "Location");
+				const pincode = getValueFromTable(workItemTable, "Pincode");
+				const preBidMeetingDate = getValueFromTable(workItemTable, "Pre Bid Meeting Date");
+				const preBidMeetingAddress = getValueFromTable(workItemTable, "Pre Bid Meeting Address");
+				const preBidMeetingPlace = getValueFromTable(workItemTable, "Pre Bid Meeting Place");
+				const periodOfWork = getValueFromTable(workItemTable, "Period Of Work");
+
+				const emdAmountText = getValueFromTable(emdFeeTable, "EMD Amount");
+				const emdFeeType = getValueFromTable(emdFeeTable, "EMD Fee Type");
+				const emdExceptionAllowed = getValueFromTable(emdFeeTable, "EMD Exemption Allowed");
+				const emdPercentageText = getValueFromTable(emdFeeTable, "EMD Percentage");
+				const emdPayableTo = getValueFromTable(emdFeeTable, "EMD Payable To");
+				const emdPayableAt = getValueFromTable(emdFeeTable, "EMD Payable At");
+
+				const publishedDate = getValueFromTable(criticalDatesTable, "Published Date");
+				const bidOpeningDate = getValueFromTable(criticalDatesTable, "Bid Opening Date");
+				const bidSubmissionStartDate = getValueFromTable(criticalDatesTable, "Bid Submission Start Date");
+				const bidSubmissionEndDate = getValueFromTable(criticalDatesTable, "Bid Submission End Date");
+
+				const tenderInvitingAuthorityName = getValueFromTable(authorityTable, "Name");
+				const tenderInvitingAuthorityAddress = getValueFromTable(authorityTable, "Address");
 
 				return {
-					basicDetails,
-					tenderFeeDetails,
-					emdFeeDetails,
-					workItemDetails,
-					criticalDates,
-					tenderAuthority,
+					organisationChain,
+					tenderId,
+					tenderRefNo,
+					workDescription,
+					title,
+					tenderValueText,
+					location,
+					pincode,
+					preBidMeetingDate,
+					preBidMeetingAddress,
+					preBidMeetingPlace,
+					periodOfWork,
+					emdAmountText,
+					emdFeeType,
+					emdExceptionAllowed,
+					emdPercentageText,
+					emdPayableTo,
+					emdPayableAt,
+					publishedDate,
+					bidOpeningDate,
+					bidSubmissionStartDate,
+					bidSubmissionEndDate,
+					tenderInvitingAuthorityName,
+					tenderInvitingAuthorityAddress,
 				};
 			});
 
-			this.logger.success("Successfully scraped tender details");
-			return tenderDetails;
+			// Transform scraped data to ScrapedTenderData format
+			const transformedTender = this.transformToScrapedTenderData(
+				scrapedData,
+				tenderLink,
+				organisation,
+				organisationChain,
+				referenceNumber
+			);
+
+			if (transformedTender) {
+				this.logger.success("Successfully scraped and transformed tender details");
+				this.logger.info(`Scraped Tender Data: ${JSON.stringify(transformedTender, null, 2)}`);
+				return transformedTender;
+			}
+
+			this.logger.warning("Failed to transform tender data - missing required fields");
+			return null;
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error
 					? error.message
 					: "Unknown error occurred";
 			this.logger.error(`Error scraping tender details: ${errorMessage}`);
+			return null;
+		}
+	}
 
-			return {
-				basicDetails: {},
-				tenderFeeDetails: {},
-				emdFeeDetails: {},
-				workItemDetails: {},
-				criticalDates: {},
-				tenderAuthority: {},
+	// Transform scraped raw data to ScrapedTenderData interface format
+	private transformToScrapedTenderData(
+		scrapedData: any,
+		tenderLink: string,
+		organisation: string,
+		organisationChain: string,
+		referenceNumber: string
+	): ScrapedTenderData | null {
+		try {
+			// Helper to parse currency values (remove commas and parse)
+			const parseCurrency = (value: string): number | undefined => {
+				if (!value || value.toLowerCase() === "na") return undefined;
+				const cleaned = value.replace(/[₹,\s]/g, "");
+				const parsed = parseFloat(cleaned);
+				return isNaN(parsed) ? undefined : parsed;
 			};
+
+			// Helper to parse boolean from Yes/No
+			const parseBoolean = (value: string): boolean => {
+				return value?.toLowerCase().trim() === "yes";
+			};
+
+			// Helper to parse percentage
+			const parsePercentage = (value: string): number | undefined => {
+				if (!value || value.toLowerCase() === "na") return undefined;
+				const cleaned = value.replace(/[%\s]/g, "");
+				const parsed = parseFloat(cleaned);
+				return isNaN(parsed) ? undefined : parsed;
+			};
+
+			// Helper to normalize string values: trim, convert "NA"/empty to undefined
+			const normalizeString = (value: string | undefined | null): string | undefined => {
+				if (!value) return undefined;
+				const trimmed = value.trim();
+				if (trimmed === "" || trimmed.toLowerCase() === "na" || trimmed === "N/A") {
+					return undefined;
+				}
+				return trimmed;
+			};
+
+			// Extract organisation from chain if not provided
+			const org = organisation || organisationChain?.split("-")[0]?.trim() || "";
+
+			// Get organisation chain from scraped data or parameter
+			const finalOrgChain = scrapedData.organisationChain || organisationChain || "";
+
+			// Required fields validation
+			if (!scrapedData.workDescription || !finalOrgChain) {
+				this.logger.warning("Missing required fields: workDescription or organisationChain");
+				return null;
+			}
+
+			// Build the transformed data with normalized values
+			const transformed: ScrapedTenderData = {
+				tenderId: (scrapedData.tenderId || referenceNumber || "").trim(),
+				tenderRefNo: (scrapedData.tenderRefNo || referenceNumber || "").trim(),
+				version: 1, // Default version
+				isLatest: true, // Assume latest for new scrapes
+				tenderValue: parseCurrency(scrapedData.tenderValueText),
+				workDescription: (scrapedData.workDescription || scrapedData.title || "").trim(),
+				preBidMeetingDate: normalizeString(scrapedData.preBidMeetingDate),
+				preBidMeetingAddress: normalizeString(scrapedData.preBidMeetingAddress),
+				preBidMeetingPlace: normalizeString(scrapedData.preBidMeetingPlace),
+				periodOfWork: normalizeString(scrapedData.periodOfWork),
+				organisationChain: finalOrgChain.trim(),
+				organisation: org.trim(),
+				tenderInvitingAuthorityName: normalizeString(scrapedData.tenderInvitingAuthorityName),
+				tenderInvitingAuthorityAddress: normalizeString(scrapedData.tenderInvitingAuthorityAddress),
+				emdAmount: parseCurrency(scrapedData.emdAmountText),
+				emdFeeType: normalizeString(scrapedData.emdFeeType),
+				emdExceptionAllowed: parseBoolean(scrapedData.emdExceptionAllowed),
+				emdPercentage: parsePercentage(scrapedData.emdPercentageText),
+				emdPayableTo: normalizeString(scrapedData.emdPayableTo),
+				emdPayableAt: normalizeString(scrapedData.emdPayableAt),
+				principal: undefined, // Not in HTML structure
+				location: normalizeString(scrapedData.location),
+				pincode: normalizeString(scrapedData.pincode),
+				publishedDate: scrapedData.publishedDate
+					? scrapedData.publishedDate.trim()
+					: new Date().toISOString(), // Fallback to current date as ISO string if not found
+				bidOpeningDate: normalizeString(scrapedData.bidOpeningDate),
+				bidSubmissionStartDate: normalizeString(scrapedData.bidSubmissionStartDate),
+				bidSubmissionEndDate: normalizeString(scrapedData.bidSubmissionEndDate),
+				isSuretyBondAllowed: false, // Not in HTML structure, default to false
+				sourceOfTender: undefined, // Not in HTML structure
+				compressedTenderDocumentsURI: undefined, // Not directly in HTML structure
+				provider: ScrapingProvider.EPROCURE,
+				sourceUrl: tenderLink,
+				scrapedAt: new Date(),
+				dataHash: this.generateDataHash(scrapedData, tenderLink),
+				sessionId: this.sessionId || undefined,
+			};
+
+			return transformed;
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error
+					? error.message
+					: "Unknown error occurred";
+			this.logger.error(`Error transforming tender data: ${errorMessage}`);
+			return null;
+		}
+	}
+
+	// Generate data hash for deduplication
+	private generateDataHash(scrapedData: any, tenderLink: string): string {
+		try {
+			const hashInput = JSON.stringify({
+				tenderId: scrapedData.tenderId,
+				tenderRefNo: scrapedData.tenderRefNo,
+				tenderLink,
+				workDescription: scrapedData.workDescription,
+			});
+
+			return crypto.createHash("sha256").update(hashInput).digest("hex");
+		} catch (error) {
+			// Fallback hash if generation fails
+			return crypto.createHash("sha256").update(tenderLink + Date.now()).digest("hex");
 		}
 	}
 

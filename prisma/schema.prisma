@@ -10,8 +10,8 @@ datasource db {
 
 enum ScrapingProvider {
   EPROCURE
-  GEM
-  CPP_PORTAL
+  ETENDER
+  EPROCURE_CPPP
   CUSTOM
 }
 
@@ -69,8 +69,81 @@ model ScrapingSession {
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
   
+  // Relations
+  tenders                 Tender[]
+  
   @@index([provider])
   @@index([status])
   @@index([startedAt])
   @@index([lastActivityAt])
+}
+
+model Tender {
+  id                      String           @id @default(uuid())
+  
+  // Tender identification
+  tenderId                String
+  tenderRefNo             String
+  version                 Int              @default(1)
+  isLatest                Boolean          @default(true)
+  
+  // Tender details
+  tenderValue             Float?
+  workDescription         String
+  preBidMeetingDate       String?
+  preBidMeetingAddress    String?
+  preBidMeetingPlace      String?
+  periodOfWork            String?
+  organisationChain       String
+  organisation            String
+  tenderInvitingAuthorityName     String?
+  tenderInvitingAuthorityAddress  String?
+  
+  // EMD details
+  emdAmount               Float?
+  emdFeeType              String?
+  emdExceptionAllowed     Boolean          @default(false)
+  emdPercentage           Float?
+  emdPayableTo            String?
+  emdPayableAt            String?
+  principal               String?
+  
+  // Location details
+  location                String?
+  pincode                 String?
+  
+  // Dates (stored as strings in exact format from website)
+  publishedDate           String
+  bidOpeningDate          String?
+  bidSubmissionStartDate  String?
+  bidSubmissionEndDate    String?
+  
+  // Other details
+  isSuretyBondAllowed     Boolean          @default(false)
+  sourceOfTender          String?
+  compressedTenderDocumentsURI String?
+  
+  // Scraping metadata
+  provider                ScrapingProvider
+  sourceUrl               String
+  scrapedAt               DateTime
+  dataHash                String
+  sessionId               String?
+  
+  // Relations
+  session                 ScrapingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  
+  // Timestamps
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  
+  @@unique([tenderId, tenderRefNo, version])
+  @@index([tenderId])
+  @@index([tenderRefNo])
+  @@index([tenderId, tenderRefNo, isLatest])
+  @@index([isLatest])
+  @@index([provider])
+  @@index([sessionId])
+  @@index([scrapedAt])
+  @@index([createdAt])
 }

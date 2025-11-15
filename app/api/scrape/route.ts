@@ -10,10 +10,21 @@ export async function POST(request: NextRequest) {
 		const {
 			provider,
 			organizations,
-			dateRange,
+			dateRange: rawDateRange,
 			isTenderPerOrganizationLimited,
 			tendersPerOrganization,
 		} = await request.json();
+
+		// Normalize date range: convert from/to to startDate/endDate if needed
+		let dateRange = rawDateRange;
+		if (rawDateRange) {
+			if (rawDateRange.from || rawDateRange.to) {
+				dateRange = {
+					startDate: rawDateRange.from || rawDateRange.startDate,
+					endDate: rawDateRange.to || rawDateRange.endDate,
+				};
+			}
+		}
 
 		if (!provider) {
 			const response: ApiResponse<null> = {
@@ -58,7 +69,8 @@ export async function POST(request: NextRequest) {
 			dateRange,
 			tendersPerOrganization,
 			isTenderPerOrganizationLimited,
-			activeSession.id
+			activeSession.id,
+			provider as ScrapingProvider
 		);
 
 		const response: ApiResponse<string> = {

@@ -7,7 +7,7 @@ export interface ScrapedTenderData {
 	isLatest?: boolean;
 	tenderValue?: number;
 	workDescription: string;
-	preBidMeetingDate?: Date;
+	preBidMeetingDate?: string;
 	preBidMeetingAddress?: string;
 	preBidMeetingPlace?: string;
 	periodOfWork?: string;
@@ -24,10 +24,10 @@ export interface ScrapedTenderData {
 	principal?: string;
 	location?: string;
 	pincode?: string;
-	publishedDate: Date;
-	bidOpeningDate?: Date;
-	bidSubmissionStartDate?: Date;
-	bidSubmissionEndDate?: Date;
+	publishedDate: string;
+	bidOpeningDate?: string;
+	bidSubmissionStartDate?: string;
+	bidSubmissionEndDate?: string;
 	isSuretyBondAllowed: boolean;
 	sourceOfTender?: string;
 	compressedTenderDocumentsURI?: string;

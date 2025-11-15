@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Tender" ALTER COLUMN "preBidMeetingDate" SET DATA TYPE TEXT,
+ALTER COLUMN "publishedDate" SET DATA TYPE TEXT,
+ALTER COLUMN "bidOpeningDate" SET DATA TYPE TEXT,
+ALTER COLUMN "bidSubmissionStartDate" SET DATA TYPE TEXT,
+ALTER COLUMN "bidSubmissionEndDate" SET DATA TYPE TEXT;

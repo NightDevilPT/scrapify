@@ -1,3 +1,5 @@
+import { ScrapingProvider } from "@prisma/client";
+
 export interface OrganizationInfo {
 	name: string;
 	id: string;
@@ -17,7 +19,8 @@ export interface ScraperProvider {
 		dateRange?: DateRange,
 		tendersPerOrganization?: number,
 		isTenderPerOrganizationLimited?: boolean,
-		sessionId?: string // NEW: Accept session ID
+		sessionId?: string,
+		provider?: ScrapingProvider
 	): Promise<any>;
 }
 
