@@ -135,35 +135,46 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "tenderId",
 				header: "Tender ID",
-				className: "whitespace-nowrap",
+				className: "whitespace-nowrap w-auto",
 				render: (value) => <span className="font-medium">{value}</span>,
 			},
 			{
 				key: "tenderRefNo",
 				header: "Reference No",
-				className: "whitespace-nowrap",
-			},
-			{
-				key: "version",
-				header: "Version",
-				className: "whitespace-nowrap",
-			},
-			{
-				key: "isLatest",
-				header: "Is Latest",
-				className: "whitespace-nowrap",
-				render: (value) => (value ? "Yes" : "No"),
+				className: "whitespace-nowrap w-auto",
 			},
 			{
 				key: "tenderValue",
 				header: "Tender Value",
-				className: "whitespace-nowrap",
+				className: "whitespace-nowrap w-auto",
 				render: (value) => (value ? `₹${value.toLocaleString()}` : "-"),
+			},
+			{
+				key: "tenderType",
+				header: "Tender Type",
+				className: "whitespace-nowrap w-auto",
+				render: (value) => value || "-",
+			},
+			{
+				key: "contractDate",
+				header: "Contract Date",
+				className: "whitespace-nowrap w-auto",
+				render: (value) => (typeof value === "string" ? value : value ? String(value) : "-"),
+			},
+			{
+				key: "completionInfo",
+				header: "Completion Info",
+				className: "",
+				render: (value) => (
+					<div className="" title={value || ""}>
+						{value || "-"}
+					</div>
+				),
 			},
 			{
 				key: "priceCategory",
 				header: "Price Category",
-				className: "whitespace-nowrap",
+				className: "whitespace-nowrap w-auto",
 				sortable: false,
 				accessor: (row) => row.tenderValue || 0,
 				render: (value, row) => {
@@ -173,7 +184,7 @@ export function TenderTable({ provider }: TenderTableProps) {
 					}
 
 					const fiveCR = 50000000; // 5 Crores = 50,000,000
-					const hundredCR = 900000000; // 100 Crores = 1,000,000,000
+					const hundredCR = 1000000000; // 100 Crores = 1,000,000,000
 
 					if (tenderValue < fiveCR) {
 						return (
@@ -209,11 +220,53 @@ export function TenderTable({ provider }: TenderTableProps) {
 				},
 			},
 			{
+				key: "numberOfBidsReceived",
+				header: "Bids Received",
+				className: "whitespace-nowrap w-auto",
+				render: (value) => (typeof value === "number" ? value : value ?? "-"),
+			},
+			{
+				key: "numberOfBidderSelected",
+				header: "Bidders Selected",
+				className: "whitespace-nowrap w-auto",
+				render: (value) => (typeof value === "number" ? value : value ?? "-"),
+			},
+			{
+				key: "selectedBidders",
+				header: "Selected Bidders",
+				accessor: (row) => Array.isArray(row.selectedBidders) ? row.selectedBidders : [],
+				render: (value) => {
+					const list = Array.isArray(value) ? value : [];
+					if (!list.length) {
+						return <span>-</span>;
+					}
+					return (
+						<div className="flex flex-wrap gap-1" title={list.join(", ")}>
+							{list.map((name: string, idx: number) => (
+								<Badge key={`${name}-${idx}`} variant="default">
+									{name}
+								</Badge>
+							))}
+						</div>
+					);
+				},
+			},
+			{
+				key: "selectedBiddersAddress",
+				header: "Bidders Address",
+				className: "",
+				render: (value) => (
+					<div className="" title={value || ""}>
+						{value || "-"}
+					</div>
+				),
+			},
+			{
 				key: "workDescription",
 				header: "Work Description",
-				className: "max-w-[300px]",
+				className: "",
 				render: (value, row) => (
-					<div className="truncate" title={value}>
+					<div className="" title={value}>
 						{value}
 					</div>
 				),
@@ -221,7 +274,7 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "preBidMeetingDate",
 				header: "Pre-Bid Meeting Date",
-				className: "whitespace-nowrap",
+				className: "whitespace-nowrap w-auto",
 				render: (value) =>
 					typeof value === "string"
 						? value
@@ -232,9 +285,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "preBidMeetingAddress",
 				header: "Pre-Bid Meeting Address",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -242,9 +295,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "preBidMeetingPlace",
 				header: "Pre-Bid Meeting Place",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -258,9 +311,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "organisationChain",
 				header: "Organisation Chain",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value, row) => (
-					<div className="truncate" title={value}>
+					<div className="" title={value}>
 						{value}
 					</div>
 				),
@@ -268,9 +321,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "organisation",
 				header: "Organization",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value, row) => (
-					<div className="truncate" title={value}>
+					<div className="" title={value}>
 						{value}
 					</div>
 				),
@@ -278,9 +331,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "tenderInvitingAuthorityName",
 				header: "Tender Inviting Authority Name",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -288,9 +341,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "tenderInvitingAuthorityAddress",
 				header: "Tender Inviting Authority Address",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -304,7 +357,7 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "emdFeeType",
 				header: "EMD Fee Type",
-				className: "whitespace-nowrap",
+				className: "",
 				render: (value) => value || "-",
 			},
 			{
@@ -323,9 +376,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "emdPayableTo",
 				header: "EMD Payable To",
-				className: "max-w-[150px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -333,9 +386,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "emdPayableAt",
 				header: "EMD Payable At",
-				className: "max-w-[150px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -343,9 +396,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "principal",
 				header: "Principal",
-				className: "max-w-[150px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -353,7 +406,7 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "location",
 				header: "Location",
-				className: "whitespace-nowrap",
+				className: "",
 				render: (value) => value || "-",
 			},
 			{
@@ -411,9 +464,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "sourceOfTender",
 				header: "Source of Tender",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -421,9 +474,9 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "compressedTenderDocumentsURI",
 				header: "Compressed Documents URI",
-				className: "max-w-[200px] truncate",
+				className: "",
 				render: (value) => (
-					<div className="truncate" title={value || ""}>
+					<div className="" title={value || ""}>
 						{value || "-"}
 					</div>
 				),
@@ -436,6 +489,38 @@ export function TenderTable({ provider }: TenderTableProps) {
 			{
 				key: "scrapedAt",
 				header: "Scraped At",
+				className: "whitespace-nowrap",
+				render: (value) =>
+					value instanceof Date
+						? value.toLocaleString()
+						: typeof value === "string"
+						? new Date(value).toLocaleString()
+						: "-",
+			},
+			{
+				key: "sessionId",
+				header: "Session ID",
+				className: "max-w-[220px] truncate",
+				render: (value) => (
+					<div className="truncate" title={value || ""}>
+						{value || "-"}
+					</div>
+				),
+			},
+			{
+				key: "createdAt",
+				header: "Created At",
+				className: "whitespace-nowrap",
+				render: (value) =>
+					value instanceof Date
+						? value.toLocaleString()
+						: typeof value === "string"
+						? new Date(value).toLocaleString()
+						: "-",
+			},
+			{
+				key: "updatedAt",
+				header: "Updated At",
 				className: "whitespace-nowrap",
 				render: (value) =>
 					value instanceof Date
@@ -650,7 +735,7 @@ export function TenderTable({ provider }: TenderTableProps) {
 
 	return (
 		<Card ref={cardRef} className="w-full max-w-full overflow-hidden">
-			<CardHeader className="px-6">
+			<CardHeader className="px-6 py-0">
 				<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
 					<CardTitle className="text-lg">
 						Scraped Tenders
@@ -678,7 +763,7 @@ export function TenderTable({ provider }: TenderTableProps) {
 			<CardContent className="p-0 grid grid-cols-1">
 				<div className="overflow-x-auto px-6 pb-6">
 					{loading ? (
-						<TableSkeleton rows={10} columns={39} />
+						<TableSkeleton rows={10} columns={columns.length} />
 					) : allTenders.length === 0 ? (
 						<div className="text-center py-8 px-6 text-muted-foreground">
 							No tenders found for {provider}

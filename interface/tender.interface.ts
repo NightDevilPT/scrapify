@@ -6,7 +6,10 @@ export interface ScrapedTenderData {
 	version: number;
 	isLatest?: boolean;
 	tenderValue?: number;
+	tenderType?: string;
 	workDescription: string;
+	contractDate?: string;
+	completionInfo?: string;
 	preBidMeetingDate?: string;
 	preBidMeetingAddress?: string;
 	preBidMeetingPlace?: string;
@@ -31,6 +34,12 @@ export interface ScrapedTenderData {
 	isSuretyBondAllowed: boolean;
 	sourceOfTender?: string;
 	compressedTenderDocumentsURI?: string;
+	// CPP-specific additions
+	selectedBidders?: string[];
+	numberOfBidsReceived?: number;
+	numberOfBidderSelected?: number;
+	selectedBiddersAddress?: string;
+	selectedBiddersCsv?: string;
 	provider: ScrapingProvider;
 	sourceUrl: string;
 	scrapedAt: Date;

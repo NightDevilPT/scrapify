@@ -90,6 +90,9 @@ model Tender {
   // Tender details
   tenderValue             Float?
   workDescription         String
+  tenderType              String?
+  contractDate            String?
+  completionInfo          String?
   preBidMeetingDate       String?
   preBidMeetingAddress    String?
   preBidMeetingPlace      String?
@@ -122,6 +125,12 @@ model Tender {
   isSuretyBondAllowed     Boolean          @default(false)
   sourceOfTender          String?
   compressedTenderDocumentsURI String?
+  // CPP-specific post-award fields
+  selectedBidders         String[]        @default([])
+  numberOfBidsReceived    Int?
+  numberOfBidderSelected  Int?
+  selectedBiddersAddress  String?
+  selectedBiddersCsv      String?
   
   // Scraping metadata
   provider                ScrapingProvider

@@ -38,13 +38,13 @@ export const Routes: IRoute[] = [
 	// 	icon: PocketKnife,
 	// 	tenderType: "GEM",
 	// },
-	// {
-	// 	id: crypto.randomUUID(),
-	// 	label: "Cpp-Portal",
-	// 	url: "/scrapper/CPP_PORTAL",
-	// 	icon: Puzzle,
-	// 	tenderType: "CPP_PORTAL",
-	// },
+	{
+		id: crypto.randomUUID(),
+		label: "Eprocure CPPP Portal",
+		url: "/scrapper/"+ScrapingProvider.EPROCURE_CPPP,
+		icon: Puzzle,
+		tenderType: ScrapingProvider.EPROCURE_CPPP,
+	},
 	{
 		id: crypto.randomUUID(),
 		label: "Settings",

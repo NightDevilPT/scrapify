@@ -15,13 +15,13 @@ export const ScraperProviderURL: Record<
 		url: "https://eprocure.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page",
 		label: "E-Procure",
 	},
-	[ScrapingProvider.GEM]: {
+	[ScrapingProvider.ETENDER]: {
 		url: "https://etenders.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page",
 		label: "Gem",
 	},
-	[ScrapingProvider.CPP_PORTAL]: {
+	[ScrapingProvider.EPROCURE_CPPP]: {
 		url: "https://eprocure.gov.in/cppp/resultoftendersnew/cpppdata",
-		label: "CPP Portal",
+		label: "Eprocure CPPP Portal",
 	},
 	[ScrapingProvider.CUSTOM]: {
 		url: "",

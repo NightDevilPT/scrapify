@@ -291,13 +291,23 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
 						</div>
 						<div className="flex items-center gap-1 ml-2">
 							{selectedOrganizations.length > 0 && (
-								<button
-									type="button"
+								<span
+									role="button"
+									tabIndex={0}
 									onClick={clearAll}
-									className="p-1 hover:bg-muted rounded-full"
+									onKeyDown={(e) => {
+										if (
+											e.key === "Enter" ||
+											e.key === " "
+										) {
+											e.preventDefault();
+											clearAll(e as any);
+										}
+									}}
+									className="p-1 hover:bg-muted rounded-full cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
 								>
 									<X className="h-3 w-3" />
-								</button>
+								</span>
 							)}
 							<ChevronsUpDown className="h-4 w-4 opacity-50" />
 						</div>

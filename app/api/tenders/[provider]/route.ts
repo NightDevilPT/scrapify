@@ -1,98 +1,69 @@
-// app/api/tenders/[provider]/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient, ScrapingProvider, Tender } from "@prisma/client";
-import { tenderService } from "@/lib/tender-service/tender.service";
+import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma-service/prisma.service";
+import { ScrapingProvider } from "@prisma/client";
 
-const prisma = new PrismaClient();
-
+// In some Next.js versions, dynamic route params are provided as a Promise and must be awaited.
 export async function GET(
-	request: NextRequest,
-	{ params }: { params: Promise<{ provider: string }> }
+	req: Request,
+	ctx: { params: Promise<{ provider: string }> } | { params: { provider: string } }
 ) {
 	try {
-		const provider = (await params).provider;
+		const { searchParams } = new URL(req.url);
+		const all = searchParams.get("all") === "true";
+		const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+		const pageSize = Math.max(1, Math.min(500, parseInt(searchParams.get("pageSize") || "20", 10)));
+		const since = searchParams.get("since"); // optional ISO date
+		// Resolve dynamic params across Next.js versions
+		const resolvedParams =
+			"then" in (ctx as any).params ? await (ctx as any).params : (ctx as any).params;
+		const providerParam = (resolvedParams?.provider || "").toUpperCase();
+		// Validate provider (fallback: no filter if invalid)
+		const providerFilter = Object.values(ScrapingProvider).includes(providerParam as ScrapingProvider)
+			? (providerParam as ScrapingProvider)
+			: undefined;
 
-		if (!provider) {
-			return NextResponse.json(
-				{
-					success: false,
-					data: null,
-					message: "Provider is required",
-					error: "MISSING_PROVIDER",
-				},
-				{ status: 400 }
-			);
+		const whereClause: any = {};
+		if (providerFilter) {
+			whereClause.provider = providerFilter;
+		}
+		if (since) {
+			const sinceDate = new Date(since);
+			if (!isNaN(sinceDate.getTime())) {
+				whereClause.scrapedAt = { gte: sinceDate };
+			}
 		}
 
-		// Get query parameters
-		const searchParams = request.nextUrl.searchParams;
-		const allRecords = searchParams.get("all") === "true" || !searchParams.get("page");
-		
-		// Get total count
-		const totalCount = await tenderService.getTenderCount({
-			provider: provider.toUpperCase() as ScrapingProvider,
+		const totalCount = await prisma.tender.count({ where: whereClause });
+
+		if (all) {
+			const data = await prisma.tender.findMany({
+				where: whereClause,
+				orderBy: { scrapedAt: "desc" },
+			});
+			return NextResponse.json({ success: true, data, totalCount });
+		}
+
+		// Paginated response
+		const data = await prisma.tender.findMany({
+			where: whereClause,
+			orderBy: { scrapedAt: "desc" },
+			skip: (page - 1) * pageSize,
+			take: pageSize,
 		});
+		const totalPages = Math.ceil(totalCount / pageSize);
 
-		let tenders: Tender[];
-		
-		if (allRecords) {
-			// Fetch all tenders without pagination - explicitly don't pass limit/offset
-			tenders = await tenderService.getAllTenders({
-				provider: provider.toUpperCase() as ScrapingProvider,
-				// Don't pass limit or offset to get all records
-			});
-			
-			console.log(`[API] Fetched all records for ${provider}: ${tenders.length} out of ${totalCount} total`);
-			
-			return NextResponse.json({
-				success: true,
-				data: tenders,
-				totalCount,
-				message: `Fetched ${tenders.length} tenders for ${provider}`,
-				error: null,
-			});
-		} else {
-			// Fetch with pagination (for backward compatibility)
-			const page = parseInt(searchParams.get("page") || "1", 10);
-			const limit = parseInt(searchParams.get("limit") || "10", 10);
-			const offset = (page - 1) * limit;
-			
-			tenders = await tenderService.getAllTenders({
-				provider: provider.toUpperCase() as ScrapingProvider,
-				limit,
-				offset,
-			});
-
-			const totalPages = Math.ceil(totalCount / limit);
-
-			return NextResponse.json({
-				success: true,
-				data: tenders,
-				pagination: {
-					page,
-					limit,
-					totalCount,
-					totalPages,
-					hasNextPage: page < totalPages,
-					hasPreviousPage: page > 1,
-				},
-				message: `Fetched ${tenders.length} tenders for ${provider}`,
-				error: null,
-			});
-		}
-	} catch (error) {
-		console.error("Error fetching tenders:", error);
+		return NextResponse.json({
+			success: true,
+			data,
+			totalCount,
+			page,
+			pageSize,
+			totalPages,
+		});
+	} catch (error: any) {
 		return NextResponse.json(
-			{
-				success: false,
-				data: null,
-				message: "Internal server error",
-				error: "INTERNAL_SERVER_ERROR",
-			},
+			{ success: false, message: error?.message || "Failed to fetch tenders" },
 			{ status: 500 }
 		);
-	} finally {
-		await prisma.$disconnect();
 	}
 }
-
