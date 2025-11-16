@@ -111,19 +111,6 @@ export function ActiveSessionCard({ session }: ActiveSessionCardProps) {
 							</Badge>
 						)}
 					</div>
-					{session.estimatedCompletionTime ? (
-						<div className="text-xs text-muted-foreground">
-							Estimated completion:{" "}
-							<span className="font-medium">
-								{formatEstimatedTime(session.estimatedCompletionTime)}
-							</span>
-						</div>
-					) : (
-						<div className="text-xs text-muted-foreground flex items-center gap-1">
-							<Loader2 className="h-3 w-3 animate-spin" />
-							Estimated completion: Calculating...
-						</div>
-					)}
 				</div>
 			</CardContent>
 		</Card>

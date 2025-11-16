@@ -51,7 +51,7 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
 							<ThemeToggle />
 						</div>
 					</header>
-					<ScrollArea className="w-full overflow-y-auto max-h-[calc(100vh-60px)] pb-5">
+					<ScrollArea className="w-full overflow-hidden max-h-[calc(100vh-60px)] pb-5">
 						{children}
 					</ScrollArea>
 				</div>

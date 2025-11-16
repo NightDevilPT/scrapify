@@ -246,7 +246,7 @@ export default function DashboardPage() {
 							))}
 						</div>
 					) : (
-						<div className="text-center py-8 text-muted-foreground">
+						<div className="text-center pb-8 text-muted-foreground">
 							<Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
 							<p>No active sessions</p>
 						</div>

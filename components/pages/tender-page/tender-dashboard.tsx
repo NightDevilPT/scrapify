@@ -310,29 +310,28 @@ export function TenderDashboard({ tenderType }: TenderDashboardProps) {
 			</div>
 
 			{/* Active Sessions - Professional Card */}
-			{activeSessions.length > 0 && (
-				<Card className="shadow-sm">
-					<CardHeader className="pb-4">
-						<div className="flex items-center justify-between">
-							<div>
-								<CardTitle className="text-xl font-semibold">
-									Active {tenderType} Sessions
-								</CardTitle>
-								<CardDescription className="mt-1">
-									{activeSessions.length} session
-									{activeSessions.length !== 1
-										? "s"
-										: ""}{" "}
-									currently running
-								</CardDescription>
-							</div>
-							<Badge variant="secondary" className="text-sm">
-								{activeSessions.length} Active
-							</Badge>
+			{/* {activeSessions.length > 0 && ( */}
+			<Card className="shadow-sm">
+				<CardHeader>
+					<div className="flex items-center justify-between">
+						<div>
+							<CardTitle className="text-xl font-semibold">
+								Active {tenderType} Sessions
+							</CardTitle>
+							<CardDescription className="mt-1">
+								{activeSessions.length} session
+								{activeSessions.length !== 1 ? "s" : ""}{" "}
+								currently running
+							</CardDescription>
 						</div>
-					</CardHeader>
-					<CardContent>
-						<div className="space-y-3">
+						<Badge variant="secondary" className="text-sm">
+							{activeSessions.length} Active
+						</Badge>
+					</div>
+				</CardHeader>
+				<CardContent>
+					{activeSessions.length > 0 ? (
+						<div className="space-y-4">
 							{activeSessions.map((session) => (
 								<ActiveSessionCard
 									key={session.id}
@@ -340,9 +339,15 @@ export function TenderDashboard({ tenderType }: TenderDashboardProps) {
 								/>
 							))}
 						</div>
-					</CardContent>
-				</Card>
-			)}
+					) : (
+						<div className="text-center pb-8 text-muted-foreground">
+							<Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
+							<p>No active sessions</p>
+						</div>
+					)}
+				</CardContent>
+			</Card>
+			{/* )} */}
 		</div>
 	);
 }

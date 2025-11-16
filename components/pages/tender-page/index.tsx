@@ -215,7 +215,7 @@ const TenderPage = ({ tenderType }: TenderPageProps) => {
 		<div className="w-full space-y-4 px-2">
 			{/* Compact Header Card */}
 			<Card className="overflow-hidden">
-				<CardHeader className="pb-3">
+				<CardHeader>
 					<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
 						<div className="flex items-center gap-3 min-w-0 flex-1">
 							<Building2 className="h-8 w-8 text-primary flex-shrink-0" />

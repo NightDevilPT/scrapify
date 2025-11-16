@@ -6,8 +6,9 @@ import { Tender } from "@prisma/client";
 import { ApiResponse } from "@/interface/api.interface";
 import apiService from "@/lib/api-service/api.service";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { TableSkeleton } from "./table-skeleton";
 import {
@@ -659,6 +660,18 @@ export function TenderTable({ provider }: TenderTableProps) {
 							</span>
 						)}
 					</CardTitle>
+					<div className="flex items-center gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={fetchTenders}
+							disabled={loading}
+							title="Refresh tenders"
+						>
+							<RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+							<span className="ml-2">Refresh</span>
+						</Button>
+					</div>
 				</div>
 			</CardHeader>
 			<Separator />

@@ -575,93 +575,129 @@ class SessionManager {
 		try {
 			const now = new Date();
 			const elapsedTime = now.getTime() - session.startedAt.getTime();
-			
-			console.log(`Calculating estimated time for session ${session.id}:`, {
-				tenderScraped: session.tenderScraped,
-				tendersFound: session.tendersFound,
-				progress: session.progress,
-				elapsedTime: elapsedTime
-			});
-			
-			// Calculate if we have some progress and elapsed time
-			if (session.progress > 0 && elapsedTime > 0) {
-				// If we have scraped tenders, use that for rate calculation
-				if (session.tenderScraped > 0) {
-					// Calculate scraping rate (tenders per minute)
-					const elapsedMinutes = elapsedTime / (1000 * 60);
-					const scrapingRate = session.tenderScraped / elapsedMinutes;
-					
-					// Calculate time per tender (milliseconds)
-					const timePerTender = elapsedTime / session.tenderScraped;
-					
-					// Calculate remaining tenders based on progress
-					const totalEstimatedTenders = session.tendersFound > 0 
-						? session.tendersFound 
-						: Math.round(session.tenderScraped / (session.progress / 100));
-					
-					const remainingTenders = Math.max(0, totalEstimatedTenders - session.tenderScraped);
-					
-					// Calculate estimated time remaining
-					const estimatedTimeRemaining = remainingTenders * timePerTender;
-					
-					// Calculate estimated completion time
-					const estimatedCompletionTime = new Date(now.getTime() + estimatedTimeRemaining);
-					
-					// Format estimated time remaining
-					const estimatedTimeRemainingFormatted = this.formatDuration(estimatedTimeRemaining);
-					
-					// Update session with calculated values
-					session.scrapingRate = parseFloat(scrapingRate.toFixed(2));
-					session.timePerTender = Math.round(timePerTender);
-					session.estimatedTimeRemaining = Math.round(estimatedTimeRemaining);
-					session.estimatedTimeRemainingFormatted = estimatedTimeRemainingFormatted;
-					session.estimatedCompletionTime = estimatedCompletionTime;
-					
-					console.log(`Estimated time calculated:`, {
-						scrapingRate: session.scrapingRate,
-						estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
-						estimatedCompletionTime: session.estimatedCompletionTime
-					});
-					
-					// Force immediate database update for estimated time fields
-					this.storeSessionInDatabase(session);
-				} else {
-					// If no tenders scraped yet, estimate based on progress and organizations
-					if (session.organizationsScraped > 0 && session.organizationsFound > 0) {
-						const progressRate = session.progress / 100;
-						const totalEstimatedTime = elapsedTime / progressRate;
-						const estimatedTimeRemaining = totalEstimatedTime - elapsedTime;
-						
-						// Calculate estimated completion time
-						const estimatedCompletionTime = new Date(now.getTime() + estimatedTimeRemaining);
-						
-						// Format estimated time remaining
-						const estimatedTimeRemainingFormatted = this.formatDuration(estimatedTimeRemaining);
-						
-						// Update session with calculated values
-						session.estimatedTimeRemaining = Math.round(estimatedTimeRemaining);
-						session.estimatedTimeRemainingFormatted = estimatedTimeRemainingFormatted;
-						session.estimatedCompletionTime = estimatedCompletionTime;
-						
-						console.log(`Estimated time calculated based on progress:`, {
-							estimatedTimeRemainingFormatted: session.estimatedTimeRemainingFormatted,
-							estimatedCompletionTime: session.estimatedCompletionTime
-						});
-						
-						// Force immediate database update for estimated time fields
-						this.storeSessionInDatabase(session);
-					}
-				}
-			} else {
-				// Reset estimates if not enough data
+
+			// Guard: if no elapsed time yet, reset and exit
+			if (elapsedTime <= 0) {
 				session.scrapingRate = undefined;
 				session.timePerTender = undefined;
 				session.estimatedTimeRemaining = undefined;
 				session.estimatedTimeRemainingFormatted = undefined;
 				session.estimatedCompletionTime = undefined;
-				
-				console.log(`Not enough data for estimation, resetting values`);
+				return;
 			}
+
+			// PRIMARY: Organization-based ETA
+			if (
+				session.organizationsScraped &&
+				session.organizationsScraped > 0 &&
+				session.organizationsFound &&
+				session.organizationsFound > 0
+			) {
+				// Average duration per organization based on completed orgs only
+				const avgMsPerOrg = elapsedTime / session.organizationsScraped;
+				const remainingOrgs = Math.max(
+					0,
+					session.organizationsFound - session.organizationsScraped
+				);
+				const estimatedTimeRemaining = remainingOrgs * avgMsPerOrg;
+
+				// Also provide an organizations-per-minute rate for reference
+				const elapsedMinutes = elapsedTime / (1000 * 60);
+				const orgsPerMinute =
+					session.organizationsScraped / Math.max(elapsedMinutes, 1e-6);
+
+				// Populate fields
+				session.scrapingRate = parseFloat(orgsPerMinute.toFixed(2)); // interpreted as orgs/min here
+				session.timePerTender = undefined; // not meaningful in org mode
+				session.estimatedTimeRemaining = Math.round(estimatedTimeRemaining);
+				session.estimatedTimeRemainingFormatted = this.formatDuration(
+					estimatedTimeRemaining
+				);
+				session.estimatedCompletionTime = new Date(
+					now.getTime() + estimatedTimeRemaining
+				);
+
+				// Save asynchronously
+				this.storeSessionInDatabase(session);
+				return;
+			}
+
+			// SECONDARY: Tender-based ETA across ALL organizations (fallback before any org completes)
+			if (session.tenderScraped && session.tenderScraped > 0) {
+				// Compute rate based on tenders per minute
+				const elapsedMinutes = elapsedTime / (1000 * 60);
+				const scrapingRate = session.tenderScraped / Math.max(elapsedMinutes, 1e-6);
+
+				// Time per tender in ms
+				const timePerTender = elapsedTime / session.tenderScraped;
+
+				// Total tenders target: if known tendersFound > 0 use it, otherwise
+				// derive from org progress only as a fallback.
+				let totalEstimatedTenders = session.tendersFound && session.tendersFound > 0
+					? session.tendersFound
+					: undefined;
+
+				if (totalEstimatedTenders === undefined && session.progress && session.progress > 0) {
+					// Fallback: extrapolate total tenders based on current progress percentage
+					// Ensure we don't under-estimate (ceil to at least scraped count)
+					totalEstimatedTenders = Math.max(
+						session.tenderScraped,
+						Math.ceil(session.tenderScraped / (session.progress / 100))
+					);
+				}
+
+				// If still unknown, skip ETA but keep rate
+				if (!totalEstimatedTenders || !isFinite(totalEstimatedTenders)) {
+					session.scrapingRate = parseFloat(scrapingRate.toFixed(2));
+					session.timePerTender = Math.round(timePerTender);
+					session.estimatedTimeRemaining = undefined;
+					session.estimatedTimeRemainingFormatted = undefined;
+					session.estimatedCompletionTime = undefined;
+					return;
+				}
+
+				const remainingTenders = Math.max(0, totalEstimatedTenders - session.tenderScraped);
+				const estimatedTimeRemaining = remainingTenders * timePerTender;
+
+				session.scrapingRate = parseFloat(scrapingRate.toFixed(2));
+				session.timePerTender = Math.round(timePerTender);
+				session.estimatedTimeRemaining = Math.round(estimatedTimeRemaining);
+				session.estimatedTimeRemainingFormatted = this.formatDuration(estimatedTimeRemaining);
+				session.estimatedCompletionTime = new Date(now.getTime() + estimatedTimeRemaining);
+
+				// Save asynchronously (don't block)
+				this.storeSessionInDatabase(session);
+				return;
+			}
+
+			// Secondary fallback: before any tender is scraped, use organization-based progress
+			if (
+				session.progress &&
+				session.progress > 0 &&
+				session.organizationsScraped &&
+				session.organizationsScraped > 0 &&
+				session.organizationsFound &&
+				session.organizationsFound > 0
+			) {
+				const progressRate = session.progress / 100;
+				const totalEstimatedTime = elapsedTime / Math.max(progressRate, 1e-6);
+				const estimatedTimeRemaining = Math.max(0, totalEstimatedTime - elapsedTime);
+
+				session.estimatedTimeRemaining = Math.round(estimatedTimeRemaining);
+				session.estimatedTimeRemainingFormatted = this.formatDuration(estimatedTimeRemaining);
+				session.estimatedCompletionTime = new Date(now.getTime() + estimatedTimeRemaining);
+
+				// Save asynchronously (don't block)
+				this.storeSessionInDatabase(session);
+				return;
+			}
+
+			// Not enough data to estimate yet
+			session.scrapingRate = undefined;
+			session.timePerTender = undefined;
+			session.estimatedTimeRemaining = undefined;
+			session.estimatedTimeRemainingFormatted = undefined;
+			session.estimatedCompletionTime = undefined;
 		} catch (error) {
 			console.error('Error calculating estimated time:', error);
 		}
@@ -671,20 +707,17 @@ class SessionManager {
 	 * Format duration in milliseconds to human readable string
 	 */
 	private formatDuration(milliseconds: number): string {
-		const seconds = Math.floor(milliseconds / 1000);
-		const minutes = Math.floor(seconds / 60);
+		const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
+		const minutes = Math.floor(totalSeconds / 60);
+		const seconds = totalSeconds % 60;
 		const hours = Math.floor(minutes / 60);
 		const days = Math.floor(hours / 24);
 
-		if (days > 0) {
-			return `${days}d ${hours % 24}h ${minutes % 60}m`;
-		} else if (hours > 0) {
-			return `${hours}h ${minutes % 60}m`;
-		} else if (minutes > 0) {
-			return `${minutes}m ${seconds % 60}s`;
-		} else {
-			return `${seconds}s`;
-		}
+		// Prefer non-misleading output: if < 1 minute but > 0, show seconds explicitly
+		if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+		if (hours > 0) return `${hours}h ${minutes % 60}m`;
+		if (minutes > 0) return `${minutes}m ${seconds}s`;
+		return `${seconds}s`;
 	}
 
 	/**
